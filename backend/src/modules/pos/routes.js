@@ -26,7 +26,27 @@ import {
   getSale,
   refundSale,
   getSaleStats,
+  updateOrderStatus,
+  getKitchenOrders,
 } from "./controllers/saleController.js";
+
+import {
+  getTables,
+  createTable,
+  updateTable,
+  updateTableStatus,
+  reserveTable,
+  cancelTableReservation,
+  deleteTable,
+} from "./controllers/tableController.js";
+
+import {
+  getCurrentShift,
+  openShift,
+  closeShift,
+  getShifts,
+  getShift,
+} from "./controllers/shiftController.js";
 
 import {
   validate,
@@ -35,6 +55,9 @@ import {
   createCustomerSchema,
   updateCustomerSchema,
   createSaleSchema,
+  createTableSchema,
+  updateTableSchema,
+  reserveTableSchema,
 } from "./validation.js";
 
 const router = express.Router();
@@ -151,5 +174,35 @@ router.post(
   permissionMiddleware("pos.delete"),
   refundSale
 );
+router.patch(
+  "/sales/:id/order-status",
+  userAuth,
+  permissionMiddleware("pos.update"),
+  updateOrderStatus
+);
+
+// ─── KDS (Kitchen Display) ───
+router.get(
+  "/kds",
+  userAuth,
+  permissionMiddleware("pos.read"),
+  getKitchenOrders
+);
+
+// ─── Tables ───
+router.get("/tables", userAuth, permissionMiddleware("pos.read"), getTables);
+router.post("/tables", userAuth, permissionMiddleware("pos.create"), validate(createTableSchema), createTable);
+router.patch("/tables/:id", userAuth, permissionMiddleware("pos.update"), validate(updateTableSchema), updateTable);
+router.patch("/tables/:id/status", userAuth, permissionMiddleware("pos.update"), updateTableStatus);
+router.patch("/tables/:id/reservation", userAuth, permissionMiddleware("pos.update"), validate(reserveTableSchema), reserveTable);
+router.delete("/tables/:id/reservation", userAuth, permissionMiddleware("pos.update"), cancelTableReservation);
+router.delete("/tables/:id", userAuth, permissionMiddleware("pos.delete"), deleteTable);
+
+// ─── Shifts ───
+router.get("/shifts/current", userAuth, permissionMiddleware("pos.read"), getCurrentShift);
+router.get("/shifts", userAuth, permissionMiddleware("pos.read"), getShifts);
+router.get("/shifts/:id", userAuth, permissionMiddleware("pos.read"), getShift);
+router.post("/shifts/open", userAuth, permissionMiddleware("pos.create"), openShift);
+router.post("/shifts/:id/close", userAuth, permissionMiddleware("pos.update"), closeShift);
 
 export default router;

@@ -11,12 +11,7 @@ export default defineConfig({
     })
   ],
   build: {
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Remove console.logs in production
-      },
-    },
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         manualChunks: {
@@ -26,6 +21,9 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 1000,
+  },
+  esbuild: {
+    drop: ['console', 'debugger'],
   },
   server: {
     proxy: {

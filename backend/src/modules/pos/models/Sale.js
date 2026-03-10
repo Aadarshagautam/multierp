@@ -1,19 +1,29 @@
 import mongoose from "mongoose";
+import { POS_PAYMENT_METHODS } from "../../../core/utils/nepal.js";
+
+const saleItemModifierSchema = new mongoose.Schema(
+  { name: String, option: String, price: { type: Number, default: 0 } },
+  { _id: false }
+);
 
 const saleItemSchema = new mongoose.Schema(
   {
-    productId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "pos_product",
-      required: true,
-    },
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "pos_product", required: true },
     nameSnapshot: { type: String, required: true },
     skuSnapshot: { type: String, default: "" },
+    menuCategory: { type: String, default: "" },
     qty: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
     lineTotal: { type: Number, required: true },
+    modifiers: [saleItemModifierSchema],
+    notes: { type: String, default: "" },     // "no onion", "extra spicy"
+    status: {
+      type: String,
+      enum: ["pending", "preparing", "ready", "served"],
+      default: "pending",
+    },
   },
   { _id: false }
 );
@@ -29,6 +39,12 @@ const posSaleSchema = new mongoose.Schema(
     orgId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "organization",
+      index: true,
+      default: null,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "branch",
       index: true,
       default: null,
     },
@@ -51,7 +67,7 @@ const posSaleSchema = new mongoose.Schema(
     grandTotal: { type: Number, required: true },
     paymentMethod: {
       type: String,
-      enum: ["cash", "card", "upi", "credit", "mixed"],
+      enum: POS_PAYMENT_METHODS,
       default: "cash",
     },
     paidAmount: { type: Number, default: 0 },
@@ -66,22 +82,31 @@ const posSaleSchema = new mongoose.Schema(
       ref: "user",
       required: true,
     },
-    status: {
+    status: { type: String, enum: ["paid", "partial", "due", "refund"], default: "paid" },
+    notes: { type: String, default: "" },
+    // Restaurant-specific fields
+    orderType: { type: String, enum: ["dine-in", "takeaway", "delivery"], default: "takeaway" },
+    tableId: { type: mongoose.Schema.Types.ObjectId, ref: "pos_table", default: null },
+    tableNumber: { type: Number, default: null },
+    orderStatus: {
       type: String,
-      enum: ["paid", "partial", "due", "refund"],
-      default: "paid",
+      enum: ["pending", "preparing", "ready", "served", "completed", "cancelled"],
+      default: "completed",
     },
-    notes: {
-      type: String,
-      default: "",
-    },
+    kotNumber: { type: String, default: "" },       // Kitchen Order Ticket
+    deliveryAddress: { type: String, default: "" },
+    shiftId: { type: mongoose.Schema.Types.ObjectId, ref: "pos_shift", default: null },
+    loyaltyPointsEarned: { type: Number, default: 0 },
+    loyaltyPointsRedeemed: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
-posSaleSchema.index({ orgId: 1, createdAt: -1 });
-posSaleSchema.index({ orgId: 1, status: 1 });
-posSaleSchema.index({ orgId: 1, customerId: 1 });
+posSaleSchema.index({ orgId: 1, branchId: 1, createdAt: -1 });
+posSaleSchema.index({ orgId: 1, branchId: 1, status: 1 });
+posSaleSchema.index({ orgId: 1, branchId: 1, customerId: 1 });
+posSaleSchema.index({ orgId: 1, branchId: 1, orderStatus: 1 });
+posSaleSchema.index({ orgId: 1, branchId: 1, tableId: 1 });
 posSaleSchema.index({ invoiceNo: 1 });
 
 const PosSale = mongoose.model("pos_sale", posSaleSchema);

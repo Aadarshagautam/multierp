@@ -12,6 +12,12 @@ import {
 } from 'lucide-react'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
+import {
+  DEFAULT_VAT_RATE,
+  INVOICE_PAYMENT_METHODS,
+  TAX_REGISTRATION_LABEL,
+  formatCurrencyNpr,
+} from '../utils/nepal.js'
 
 const EMPTY_ITEM = {
   productId: '',
@@ -24,14 +30,7 @@ const EMPTY_ITEM = {
   discountValue: 0
 }
 
-const PAYMENT_METHODS = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'card', label: 'Card' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'upi', label: 'UPI' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'other', label: 'Other' }
-]
+const PAYMENT_METHODS = INVOICE_PAYMENT_METHODS
 
 const InvoiceFormPage = () => {
   const navigate = useNavigate()
@@ -174,7 +173,7 @@ const InvoiceFormPage = () => {
         productName: product.productName || '',
         sku: product.sku || '',
         unitPrice: product.sellingPrice || 0,
-        vatRate: product.vatRate || 0
+        vatRate: product.vatRate ?? DEFAULT_VAT_RATE
       }
       return updated
     })
@@ -305,14 +304,11 @@ const InvoiceFormPage = () => {
       overallDiscountAmount,
       grandTotal
     }
-  }, [items, invoice.withoutVat, invoice.overallDiscountType, invoice.overallDiscountValue])
+  }, [items, invoice.vatDiscountMode, invoice.withoutVat, invoice.overallDiscountType, invoice.overallDiscountValue])
 
   // ----- Format currency -----
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value)
+    return formatCurrencyNpr(value, { symbol: false })
   }
 
   // ----- Submit handler -----

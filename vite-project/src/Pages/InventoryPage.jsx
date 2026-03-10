@@ -7,7 +7,8 @@ import {
   Edit,
   Trash2,
   Search,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
@@ -17,7 +18,14 @@ const InventoryPage = () => {
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
+  const [adjustingItem, setAdjustingItem] = useState(null)
+  const [movements, setMovements] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    quantityDelta: '',
+    reason: 'Wastage',
+    note: ''
+  })
   const [newItem, setNewItem] = useState({
     productName: '',
     quantity: '',
@@ -32,6 +40,7 @@ const InventoryPage = () => {
 
   useEffect(() => {
     fetchInventory()
+    fetchMovements()
   }, [])
 
   const fetchInventory = async () => {
@@ -45,6 +54,14 @@ const InventoryPage = () => {
       toast.error('Failed to load inventory')
     } finally {
       setLoading(false)
+    }
+  }
+  const fetchMovements = async () => {
+    try {
+      const res = await api.get('/inventory/movements')
+      setMovements(Array.isArray(res.data?.data) ? res.data.data : [])
+    } catch (error) {
+      console.error('Error fetching inventory movements:', error)
     }
   }
 
@@ -86,6 +103,7 @@ const InventoryPage = () => {
         })
         setShowAddForm(false)
         toast.success('Product added!')
+        fetchMovements()
       }
     } catch (error) {
       console.error('Error creating item:', error)
@@ -116,6 +134,7 @@ const InventoryPage = () => {
         }
         setEditingItem(null)
         toast.success('Product updated!')
+        fetchMovements()
       }
     } catch (error) {
       console.error('Error updating item:', error)
@@ -135,10 +154,41 @@ const InventoryPage = () => {
             : []
         ))
         toast.success('Product deleted')
+        fetchMovements()
       }
     } catch (error) {
       console.error('Error deleting item:', error)
       toast.error('Failed to delete product')
+    }
+  }
+  const handleAdjustItem = async (e) => {
+    e.preventDefault()
+    if (!adjustingItem) return
+
+    try {
+      const res = await api.post(`/inventory/${adjustingItem._id}/adjustments`, {
+        quantityDelta: parseFloat(adjustmentForm.quantityDelta),
+        reason: adjustmentForm.reason,
+        note: adjustmentForm.note
+      })
+
+      if (res.data.success) {
+        const updated = res.data?.data
+        if (updated) {
+          setInventory((prev) => (
+            (Array.isArray(prev) ? prev : []).map(item =>
+              item._id === updated._id ? updated : item
+            )
+          ))
+        }
+        setAdjustingItem(null)
+        setAdjustmentForm({ quantityDelta: '', reason: 'Wastage', note: '' })
+        fetchMovements()
+        toast.success('Inventory adjusted')
+      }
+    } catch (error) {
+      console.error('Error adjusting inventory:', error)
+      toast.error(error.response?.data?.message || 'Failed to adjust inventory')
     }
   }
 
@@ -420,6 +470,80 @@ const InventoryPage = () => {
         </div>
       )}
 
+      {adjustingItem && (
+        <div className="bg-white rounded-xl p-6 border border-gray-200 mb-6">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Adjust Inventory</h3>
+              <p className="text-sm text-gray-500">{adjustingItem.productName}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAdjustingItem(null)
+                setAdjustmentForm({ quantityDelta: '', reason: 'Wastage', note: '' })
+              }}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <form onSubmit={handleAdjustItem} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity Change</label>
+              <input
+                type="number"
+                step="0.001"
+                value={adjustmentForm.quantityDelta}
+                onChange={(e) => setAdjustmentForm({ ...adjustmentForm, quantityDelta: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="-2 for wastage, 3 for correction"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+              <input
+                type="text"
+                value={adjustmentForm.reason}
+                onChange={(e) => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Wastage, stock count, damage..."
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
+              <input
+                type="text"
+                value={adjustmentForm.note}
+                onChange={(e) => setAdjustmentForm({ ...adjustmentForm, note: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="Optional note"
+              />
+            </div>
+            <div className="md:col-span-3 flex gap-3">
+              <button
+                type="submit"
+                className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Save Adjustment
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdjustingItem(null)
+                  setAdjustmentForm({ quantityDelta: '', reason: 'Wastage', note: '' })
+                }}
+                className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Inventory Table */}
       {filteredInventory.length === 0 ? (
         <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
@@ -501,6 +625,13 @@ const InventoryPage = () => {
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
+                            onClick={() => setAdjustingItem(item)}
+                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Adjust"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => handleDeleteItem(item._id)}
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Delete"
@@ -517,6 +648,40 @@ const InventoryPage = () => {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Stock Activity</h3>
+          <p className="text-sm text-gray-500">Manual wastage, corrections, and purchase-driven stock changes.</p>
+        </div>
+        {movements.length === 0 ? (
+          <p className="text-sm text-gray-500">No stock activity recorded yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {movements.slice(0, 8).map((movement) => (
+              <div key={movement._id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {movement.inventoryItemId?.productName || 'Inventory item'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {movement.reason || 'Stock update'}
+                    {movement.note ? ` · ${movement.note}` : ''}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-semibold ${movement.type === 'OUT' ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {movement.type === 'OUT' ? '-' : '+'}{movement.qty}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(movement.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

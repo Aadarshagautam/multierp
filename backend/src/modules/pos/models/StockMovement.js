@@ -8,6 +8,12 @@ const stockMovementSchema = new mongoose.Schema(
       index: true,
       default: null,
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "branch",
+      index: true,
+      default: null,
+    },
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "pos_product",
@@ -41,7 +47,7 @@ const stockMovementSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-stockMovementSchema.index({ orgId: 1, createdAt: -1 });
+stockMovementSchema.index({ orgId: 1, branchId: 1, createdAt: -1 });
 stockMovementSchema.index({ productId: 1, createdAt: -1 });
 
 const StockMovement = mongoose.model("stock_movement", stockMovementSchema);

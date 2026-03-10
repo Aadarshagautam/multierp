@@ -31,3 +31,18 @@ export const getSaleStats = asyncHandler(async (req, res) => {
   const stats = await saleService.getStats(req);
   return sendSuccess(res, { data: stats });
 });
+
+export const updateOrderStatus = asyncHandler(async (req, res) => {
+  const { orderStatus } = req.body;
+  const valid = ["pending", "preparing", "ready", "served", "completed", "cancelled"];
+  if (!valid.includes(orderStatus))
+    return sendError(res, { status: 400, message: "Invalid order status" });
+  const sale = await saleService.updateOrderStatus(req.params.id, orderStatus, req);
+  if (!sale) return sendError(res, { status: 404, message: "Sale not found" });
+  return sendSuccess(res, { data: sale, message: "Order status updated" });
+});
+
+export const getKitchenOrders = asyncHandler(async (req, res) => {
+  const orders = await saleService.getKitchenOrders(req);
+  return sendSuccess(res, { data: orders });
+});

@@ -1,6 +1,7 @@
 import UserModel from "../models/User.js";
 import OrganizationModel from "../models/Organization.js";
 import OrgMemberModel from "../models/OrgMember.js";
+import BranchModel from "../models/Branch.js";
 import { ROLE_PERMISSIONS } from "../config/permissions.js";
 import { sendError, sendSuccess } from "../utils/response.js";
 
@@ -15,19 +16,31 @@ export const getUserData = async (req, res) => {
         }
 
         let orgName = null;
+        let orgBusinessType = "general";
+        let orgSoftwarePlan = "single-branch";
         let role = null;
         let permissions = [];
+        let branchId = null;
+        let branchName = null;
 
         if (user.currentOrgId) {
           const [org, membership] = await Promise.all([
-            OrganizationModel.findById(user.currentOrgId).select("name"),
+            OrganizationModel.findById(user.currentOrgId).select("name businessType softwarePlan"),
             OrgMemberModel.findOne({ orgId: user.currentOrgId, userId: user._id, isActive: true }),
           ]);
           orgName = org?.name || null;
+          orgBusinessType = org?.businessType || "general";
+          orgSoftwarePlan = org?.softwarePlan || "single-branch";
           role = membership?.role || null;
+          branchId = membership?.branchId || null;
           // Merge role defaults with individual overrides
           const rolePerms = ROLE_PERMISSIONS[membership?.role] || [];
           permissions = [...new Set([...rolePerms, ...(membership?.permissions || [])])];
+
+          if (branchId) {
+            const branch = await BranchModel.findById(branchId).select("name");
+            branchName = branch?.name || null;
+          }
         }
 
         return sendSuccess(res, {
@@ -38,6 +51,10 @@ export const getUserData = async (req, res) => {
             isAccountVerified: user.isAccountVerified,
             orgId: user.currentOrgId || null,
             orgName,
+            orgBusinessType: orgBusinessType || "general",
+            orgSoftwarePlan,
+            branchId,
+            branchName,
             role,
             permissions,
           },

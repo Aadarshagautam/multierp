@@ -35,7 +35,18 @@ export const ROLE_PERMISSIONS = {
   manager: [
     "notes.*", "todos.*", "accounting.*", "inventory.*",
     "customers.*", "invoices.*", "purchases.*", "reports.read",
-    "crm.*", "leads.*", "pos.*", "users.read",
+    "crm.*", "leads.*", "pos.*", "settings.read", "users.read",
+  ],
+  accountant: [
+    "accounting.*", "customers.read", "customers.update",
+    "invoices.read", "invoices.create", "invoices.update",
+    "inventory.read", "purchases.*", "reports.read", "crm.read",
+  ],
+  cashier: [
+    "pos.read", "pos.create", "pos.update",
+    "customers.read", "customers.create", "customers.update",
+    "invoices.read", "invoices.create",
+    "inventory.read", "reports.read",
   ],
   member: [
     "notes.read", "notes.create", "notes.update",

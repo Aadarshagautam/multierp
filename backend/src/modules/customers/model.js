@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { DEFAULT_COUNTRY } from "../../core/utils/nepal.js";
 
 const customerSchema = new mongoose.Schema(
   {
@@ -40,7 +41,7 @@ const customerSchema = new mongoose.Schema(
       city: { type: String, default: "" },
       state: { type: String, default: "" },
       pincode: { type: String, default: "" },
-      country: { type: String, default: "India" },
+      country: { type: String, default: DEFAULT_COUNTRY },
     },
     gstin: {
       type: String,

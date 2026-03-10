@@ -8,8 +8,6 @@ const CreatePages = () => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  
   const titleRef = useRef(null);
   const contentRef = useRef(null);
   const navigate = useNavigate();
@@ -145,8 +143,6 @@ const CreatePages = () => {
             placeholder="Untitled"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
             className="w-full text-5xl font-bold text-gray-900 placeholder-gray-300 outline-none border-none bg-transparent mb-4"
             style={{ caretColor: '#6366f1' }}
           />

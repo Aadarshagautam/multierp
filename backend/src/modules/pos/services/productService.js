@@ -1,7 +1,5 @@
 import PosProduct from "../models/Product.js";
-
-const ownerFilter = (req) =>
-  req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+import { buildPosScopeFilter, getPosBranchId } from "../utils/scope.js";
 
 export const productService = {
   async create(data, req) {
@@ -9,13 +7,14 @@ export const productService = {
       ...data,
       userId: req.userId,
       orgId: req.orgId || null,
+      branchId: getPosBranchId(req),
     });
     return product.save();
   },
 
   async list(req) {
-    const filter = { ...ownerFilter(req), isActive: true };
-    const { search, category, page = 1, limit = 50 } = req.query;
+    const filter = { ...buildPosScopeFilter(req), isActive: true };
+    const { search, category, isAvailable, page = 1, limit = 50 } = req.query;
 
     if (search) {
       filter.$or = [
@@ -25,6 +24,9 @@ export const productService = {
       ];
     }
     if (category) filter.category = category;
+    if (isAvailable !== undefined) {
+      filter.isAvailable = String(isAvailable) === "true";
+    }
 
     const skip = (Number(page) - 1) * Number(limit);
     const [products, total] = await Promise.all([
@@ -47,12 +49,12 @@ export const productService = {
   },
 
   async getById(id, req) {
-    return PosProduct.findOne({ _id: id, ...ownerFilter(req) });
+    return PosProduct.findOne({ _id: id, ...buildPosScopeFilter(req) });
   },
 
   async update(id, data, req) {
     return PosProduct.findOneAndUpdate(
-      { _id: id, ...ownerFilter(req) },
+      { _id: id, ...buildPosScopeFilter(req) },
       { $set: data },
       { new: true, runValidators: true }
     );
@@ -60,20 +62,20 @@ export const productService = {
 
   async softDelete(id, req) {
     return PosProduct.findOneAndUpdate(
-      { _id: id, ...ownerFilter(req) },
+      { _id: id, ...buildPosScopeFilter(req) },
       { $set: { isActive: false } },
       { new: true }
     );
   },
 
   async getLowStock(req) {
-    const filter = { ...ownerFilter(req), isActive: true };
+    const filter = { ...buildPosScopeFilter(req), isActive: true };
     const products = await PosProduct.find(filter);
     return products.filter((p) => p.stockQty <= p.lowStockAlert);
   },
 
   async getCategories(req) {
-    const filter = { ...ownerFilter(req), isActive: true };
+    const filter = { ...buildPosScopeFilter(req), isActive: true };
     return PosProduct.distinct("category", filter);
   },
 };

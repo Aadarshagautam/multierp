@@ -1,89 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  :root {
+    --surface: #f7f0e3;
+    --surface-strong: #fffaf2;
+    --surface-soft: #eef5ef;
+    --ink: #18281f;
+    --ink-soft: #536255;
+    --brand-deep: #103b31;
+    --brand-accent: #c96c1f;
+    --line: rgba(24, 40, 31, 0.08);
   }
 
-  ::-webkit-scrollbar-track {
-    background: #f1f5f9;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  /* Smooth scrolling */
   html {
     scroll-behavior: smooth;
   }
 
-  /* Better font rendering */
   body {
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: var(--surface);
+    background:
+      radial-gradient(circle at top left, rgba(201, 108, 31, 0.18), transparent 28%),
+      radial-gradient(circle at top right, rgba(16, 59, 49, 0.14), transparent 24%),
+      linear-gradient(180deg, #fffaf2 0%, #f8f0e3 42%, #eef5ef 100%);
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Segoe UI', system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    background: rgba(201, 108, 31, 0.22);
+    color: #103b31;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f6efe4; }
+  ::-webkit-scrollbar-thumb { background: #d1b48f; border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #ba8b5b; }
 }
 
 @layer components {
-  /* Custom button styles */
   .btn-primary {
-    @apply bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95;
+    background: linear-gradient(135deg, #103b31 0%, #1c6a57 58%, #c96c1f 100%);
+    box-shadow: 0 20px 40px -22px rgba(16, 59, 49, 0.55);
   }
 
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 px-6 py-2.5 rounded-lg font-medium border border-gray-300 transition-all duration-200 hover:shadow-md;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border bg-white/90 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-white active:scale-95;
+    border-color: rgba(24, 40, 31, 0.1);
+    box-shadow: 0 12px 30px -26px rgba(16, 59, 49, 0.4);
   }
 
   .btn-danger {
-    @apply bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95;
+    background: linear-gradient(135deg, #b42318 0%, #dc4b2b 100%);
+    box-shadow: 0 18px 36px -24px rgba(180, 35, 24, 0.45);
   }
 
-  /* Input styles */
   .input-primary {
-    @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200;
+    @apply w-full rounded-2xl border bg-white/90 px-4 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400 focus:outline-none focus:ring-2;
+    border-color: rgba(24, 40, 31, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   }
 
-  /* Card styles */
+  .input-primary:focus {
+    border-color: rgba(201, 108, 31, 0.5);
+    --tw-ring-color: rgba(201, 108, 31, 0.12);
+  }
+
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300;
+    @apply rounded-3xl border transition hover:shadow-md;
+    border-color: var(--line);
+    background-color: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 18px 46px -32px rgba(16, 59, 49, 0.35);
   }
 
   .card-gradient {
-    @apply bg-gradient-to-br from-white to-indigo-50 rounded-xl border border-indigo-100 shadow-sm hover:shadow-xl transition-all duration-300;
+    @apply rounded-3xl border transition hover:shadow-md;
+    border-color: rgba(201, 108, 31, 0.12);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 240, 227, 0.95));
+    box-shadow: 0 18px 48px -34px rgba(16, 59, 49, 0.28);
+  }
+
+  .page-shell {
+    @apply min-h-screen space-y-5 px-4 pb-12 pt-20 sm:px-6 lg:ml-64 lg:px-8;
+  }
+
+  .panel {
+    @apply rounded-3xl border backdrop-blur-xl;
+    border-color: rgba(24, 40, 31, 0.08);
+    box-shadow: 0 26px 70px -42px rgba(16, 59, 49, 0.42);
+    background-color: rgba(255, 255, 255, 0.82);
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 242, 0.86));
+  }
+
+  .section-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-800;
+  }
+
+  .section-heading {
+    @apply text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl;
+  }
+
+  .status-pill {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium text-stone-700;
+    border-color: rgba(24, 40, 31, 0.08);
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .action-tile {
+    @apply flex items-start justify-between gap-4 rounded-3xl border p-5 transition;
+    border-color: rgba(24, 40, 31, 0.08);
+    background-color: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 16px 42px -34px rgba(16, 59, 49, 0.28);
+  }
+
+  .action-tile:hover {
+    border-color: rgba(201, 108, 31, 0.26);
+    transform: translateY(-1px);
+    box-shadow: 0 24px 54px -34px rgba(16, 59, 49, 0.35);
   }
 }
 
 @layer utilities {
-  /* Custom gradient backgrounds */
   .gradient-bg {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #103b31 0%, #1c6a57 55%, #c96c1f 100%);
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent;
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #103b31 0%, #c96c1f 100%);
   }
 
-  /* Animation utilities */
   .animate-fade-in {
-    animation: fadeIn 0.5s ease-in;
+    animation: fadeIn 0.4s ease-out;
   }
 
   .animate-slide-up {
-    animation: slideUp 0.5s ease-out;
+    animation: slideUp 0.4s ease-out;
   }
 
   .animate-scale {
     animation: scale 0.3s ease-in-out;
+  }
+
+  .subtle-grid {
+    background-image:
+      linear-gradient(rgba(201, 108, 31, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(16, 59, 49, 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }
 
@@ -91,6 +167,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -101,6 +178,7 @@
     transform: translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -111,15 +189,16 @@
   0% {
     transform: scale(0.95);
   }
+
   50% {
-    transform: scale(1.05);
+    transform: scale(1.03);
   }
+
   100% {
     transform: scale(1);
   }
 }
 
-/* Loading animation */
 .loading-dots {
   display: inline-flex;
   gap: 4px;
@@ -129,7 +208,7 @@
   width: 8px;
   height: 8px;
   background: currentColor;
-  border-radius: 50%;
+  border-radius: 999px;
   animation: loading 1.4s infinite ease-in-out both;
 }
 
@@ -142,26 +221,34 @@
 }
 
 @keyframes loading {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     transform: scale(0);
   }
+
   40% {
     transform: scale(1);
   }
 }
 
-/* ─── POS Print Styles ─── */
 @media print {
   body * {
     visibility: hidden;
   }
+
   .print\:block,
   .print\:block * {
     visibility: visible;
   }
-  header, aside, nav, .print\:hidden {
+
+  header,
+  aside,
+  nav,
+  .print\:hidden {
     display: none !important;
   }
+
   .page-break-before {
     page-break-before: always;
   }

@@ -13,13 +13,18 @@ import {
 } from 'lucide-react'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
+import {
+  DEFAULT_COUNTRY,
+  DEFAULT_PHONE_PLACEHOLDER,
+  TAX_REGISTRATION_LABEL,
+} from '../utils/nepal.js'
 
 const initialCustomerState = {
   name: '',
   email: '',
   phone: '',
   company: '',
-  address: { street: '', city: '', state: '', pincode: '', country: 'India' },
+  address: { street: '', city: '', state: '', pincode: '', country: DEFAULT_COUNTRY },
   gstin: '',
   notes: ''
 }
@@ -202,8 +207,8 @@ const CustomersPage = () => {
     <div className="lg:ml-64 p-8 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Customer Management</h1>
-        <p className="text-gray-600">Manage your customer database and contact information.</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Customers</h1>
+        <p className="text-gray-600">Manage customer contacts, billing details, and follow-up notes.</p>
       </div>
 
       {/* Stats Cards */}
@@ -264,7 +269,7 @@ const CustomersPage = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search customers..."
+              placeholder="Search customers, phone, or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -322,7 +327,7 @@ const CustomersPage = () => {
                   value={getFieldValue('phone')}
                   onChange={(e) => handleFieldChange('phone', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="+91 98765 43210"
+                  placeholder={DEFAULT_PHONE_PLACEHOLDER}
                 />
               </div>
 
@@ -338,14 +343,14 @@ const CustomersPage = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">GSTIN</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{TAX_REGISTRATION_LABEL}</label>
                 <input
                   type="text"
                   value={getFieldValue('gstin')}
                   onChange={(e) => handleFieldChange('gstin', e.target.value.toUpperCase())}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="22AAAAA0000A1Z5"
-                  maxLength={15}
+                  placeholder="PAN or VAT number"
+                  maxLength={20}
                 />
               </div>
 
@@ -356,41 +361,41 @@ const CustomersPage = () => {
                   value={getAddressValue('street')}
                   onChange={(e) => handleAddressChange('street', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Street address"
+                  placeholder="Street, area, or landmark"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">City / Municipality</label>
                 <input
                   type="text"
                   value={getAddressValue('city')}
                   onChange={(e) => handleAddressChange('city', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="City"
+                  placeholder="Kathmandu"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Province</label>
                 <input
                   type="text"
                   value={getAddressValue('state')}
                   onChange={(e) => handleAddressChange('state', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="State"
+                  placeholder="Bagmati"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Postal Code</label>
                 <input
                   type="text"
                   value={getAddressValue('pincode')}
                   onChange={(e) => handleAddressChange('pincode', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="400001"
-                  maxLength={6}
+                  placeholder="44600"
+                  maxLength={10}
                 />
               </div>
 
@@ -401,7 +406,7 @@ const CustomersPage = () => {
                   value={getAddressValue('country')}
                   onChange={(e) => handleAddressChange('country', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="India"
+                  placeholder={DEFAULT_COUNTRY}
                 />
               </div>
 
@@ -446,7 +451,7 @@ const CustomersPage = () => {
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No customers found</h3>
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'Try a different search term' : 'Start by adding your first customer'}
+            {searchTerm ? 'Try a different search term' : 'Start by adding your first customer account'}
           </p>
           {!searchTerm && (
             <button
@@ -487,7 +492,7 @@ const CustomersPage = () => {
                     onClick={() => {
                       setEditingCustomer({
                         ...customer,
-                        address: customer.address || { street: '', city: '', state: '', pincode: '', country: 'India' }
+                        address: customer.address || { street: '', city: '', state: '', pincode: '', country: DEFAULT_COUNTRY }
                       })
                       setShowAddForm(false)
                     }}
@@ -542,7 +547,7 @@ const CustomersPage = () => {
                 {customer.gstin && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                      GSTIN
+                      {TAX_REGISTRATION_LABEL}
                     </span>
                     <span className="font-mono text-xs">{customer.gstin}</span>
                   </div>

@@ -1,11 +1,11 @@
 import Customer from "./model.js";
 import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
+import { buildTenantFilter, mergeTenantFilter } from "../../core/utils/tenant.js";
 
 export const getCustomers = async (req, res) => {
   try {
-    const userId = req.userId;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId };
+    const ownerFilter = buildTenantFilter(req);
     const customers = await Customer.find(ownerFilter).sort({ createdAt: -1 });
     return sendSuccess(res, { data: customers });
   } catch (error) {
@@ -16,10 +16,8 @@ export const getCustomers = async (req, res) => {
 
 export const getCustomer = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId };
-    const customer = await Customer.findOne({ _id: id, ...ownerFilter });
+    const customer = await Customer.findOne(mergeTenantFilter(req, { _id: id }));
     if (!customer) {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
@@ -65,7 +63,7 @@ export const updateCustomer = async (req, res) => {
       "gstin",
       "notes",
     ]);
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId };
+    const ownerFilter = buildTenantFilter(req);
 
     if (Object.keys(updates).length === 0) {
       return sendError(res, { status: 400, message: "No valid fields to update" });
@@ -89,9 +87,8 @@ export const updateCustomer = async (req, res) => {
 
 export const deleteCustomer = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId };
+    const ownerFilter = buildTenantFilter(req);
 
     const customer = await Customer.findOneAndDelete({ _id: id, ...ownerFilter });
     if (!customer) {
@@ -107,8 +104,7 @@ export const deleteCustomer = async (req, res) => {
 
 export const searchCustomers = async (req, res) => {
   try {
-    const userId = req.userId;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId };
+    const ownerFilter = buildTenantFilter(req);
     const { q } = req.query;
 
     if (!q || q.length < 2) {

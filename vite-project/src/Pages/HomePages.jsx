@@ -4,7 +4,7 @@ import { toast } from "react-hot-toast";
 import NoteCard from "./NoteCard";
 import api from "./lib/axios";
 import NotesNotFound from "./NotesNotFound";
-import { AppContext } from "../context/AppContext";
+import AppContext from "../context/app-context.js";
 import { Link } from "react-router-dom";
 
 const HomePages = () => {
@@ -13,7 +13,7 @@ const HomePages = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("newest");
-  const { userData, isLoggedin } = useContext(AppContext);
+  const { isLoggedin } = useContext(AppContext);
 
   useEffect(() => {
     if (isLoggedin) {

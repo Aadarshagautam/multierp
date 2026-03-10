@@ -1,152 +1,214 @@
-import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Edit3, Trash2, X, Users } from "lucide-react";
-import toast from "react-hot-toast";
-import { posCustomerApi } from "../../api/posApi";
+import React, { useContext, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Edit3, Plus, Search, Trash2, Users, X } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { posCustomerApi } from '../../api/posApi'
+import { getBusinessPosMeta } from '../../config/businessConfigs.js'
+import AppContext from '../../context/app-context.js'
 
-const emptyForm = { name: "", phone: "", email: "", address: "" };
+const TIER_CONFIG = {
+  bronze: { label: 'Bronze', bg: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' },
+  silver: { label: 'Silver', bg: 'bg-gray-200 text-gray-700', dot: 'bg-gray-400' },
+  gold: { label: 'Gold', bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  platinum: { label: 'Platinum', bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500' },
+}
 
-const CustomerManagement = () => {
-  const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+const emptyForm = { name: '', phone: '', email: '', address: '', birthday: '', notes: '' }
+
+export default function CustomerManagement() {
+  const { orgBusinessType } = useContext(AppContext)
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [tierFilter, setTierFilter] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState(emptyForm)
+  const posMeta = getBusinessPosMeta(orgBusinessType)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pos-customers", search],
+    queryKey: ['pos-customers', search],
     queryFn: () => posCustomerApi.list({ search }),
-  });
+  })
 
-  const customers = data?.data || [];
+  const customers = (data?.data || []).filter(customer => !tierFilter || customer.tier === tierFilter)
+  const allCustomers = data?.data || []
+  const tierCounts = Object.keys(TIER_CONFIG).reduce(
+    (accumulator, tier) => ({ ...accumulator, [tier]: allCustomers.filter(customer => customer.tier === tier).length }),
+    {}
+  )
+
+  const closeModal = () => {
+    setShowModal(false)
+    setEditId(null)
+    setForm(emptyForm)
+  }
 
   const createMut = useMutation({
-    mutationFn: (d) => posCustomerApi.create(d),
+    mutationFn: payload => posCustomerApi.create(payload),
     onSuccess: () => {
-      toast.success("Customer created");
-      queryClient.invalidateQueries({ queryKey: ["pos-customers"] });
-      closeModal();
+      toast.success('Customer created')
+      qc.invalidateQueries({ queryKey: ['pos-customers'] })
+      closeModal()
     },
-    onError: (e) => toast.error(e.response?.data?.message || "Error"),
-  });
+    onError: error => toast.error(error.response?.data?.message || 'Error'),
+  })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => posCustomerApi.update(id, data),
+    mutationFn: ({ id, data: payload }) => posCustomerApi.update(id, payload),
     onSuccess: () => {
-      toast.success("Customer updated");
-      queryClient.invalidateQueries({ queryKey: ["pos-customers"] });
-      closeModal();
+      toast.success('Customer updated')
+      qc.invalidateQueries({ queryKey: ['pos-customers'] })
+      closeModal()
     },
-    onError: (e) => toast.error(e.response?.data?.message || "Error"),
-  });
+    onError: error => toast.error(error.response?.data?.message || 'Error'),
+  })
 
   const deleteMut = useMutation({
-    mutationFn: (id) => posCustomerApi.delete(id),
+    mutationFn: id => posCustomerApi.delete(id),
     onSuccess: () => {
-      toast.success("Customer deleted");
-      queryClient.invalidateQueries({ queryKey: ["pos-customers"] });
+      toast.success('Customer deleted')
+      qc.invalidateQueries({ queryKey: ['pos-customers'] })
     },
-    onError: (e) => toast.error(e.response?.data?.message || "Error"),
-  });
+    onError: error => toast.error(error.response?.data?.message || 'Error'),
+  })
 
-  const openCreate = () => { setEditId(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = customer => {
+    setEditId(customer._id)
+    setForm({
+      name: customer.name,
+      phone: customer.phone || '',
+      email: customer.email || '',
+      address: customer.address || '',
+      birthday: customer.birthday || '',
+      notes: customer.notes || '',
+    })
+    setShowModal(true)
+  }
 
-  const openEdit = (c) => {
-    setEditId(c._id);
-    setForm({ name: c.name, phone: c.phone || "", email: c.email || "", address: c.address || "" });
-    setShowModal(true);
-  };
-
-  const closeModal = () => { setShowModal(false); setEditId(null); setForm(emptyForm); };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = event => {
+    event.preventDefault()
     if (editId) {
-      updateMut.mutate({ id: editId, data: form });
-    } else {
-      createMut.mutate(form);
+      updateMut.mutate({ id: editId, data: form })
+      return
     }
-  };
+
+    createMut.mutate(form)
+  }
 
   return (
-    <div className="p-4 lg:pl-[17.5rem] pt-20">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+    <div className="min-h-screen bg-gray-50/50 p-4 pt-20 lg:pl-[17.5rem]">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">POS Customers</h1>
-            <p className="text-sm text-gray-500">Manage your retail customers</p>
+            <h1 className="text-2xl font-bold text-gray-900">{posMeta.customerTitle}</h1>
+            <p className="text-sm text-gray-500">{posMeta.customerSummary}</p>
           </div>
           <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
           >
-            <Plus className="w-4 h-4" /> Add Customer
+            <Plus className="w-4 h-4" />
+            Add Customer
           </button>
         </div>
 
-        {/* Search */}
-        <div className="relative mb-4 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Object.entries(TIER_CONFIG).map(([tier, config]) => (
+            <button
+              key={tier}
+              onClick={() => setTierFilter(tierFilter === tier ? '' : tier)}
+              className={`rounded-2xl border p-4 text-left transition-all ${
+                tierFilter === tier ? `${config.bg} border-current ring-2 ring-offset-1 ring-indigo-400` : 'border-gray-100 bg-white hover:border-gray-200'
+              }`}
+            >
+              <div className="mb-1 flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${config.dot}`} />
+                <span className="text-xs font-medium text-gray-500">{config.label}</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{tierCounts[tier] || 0}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             placeholder="Search by name or phone..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            onChange={event => setSearch(event.target.value)}
+            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
             </div>
           ) : customers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-              <Users className="w-12 h-12 mb-3" />
+              <Users className="mb-3 h-12 w-12" />
               <p className="text-sm">No customers found</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Phone</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Address</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Credit</th>
-                    <th className="text-center px-4 py-3 font-medium text-gray-600">Actions</th>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Customer</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Phone</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">Tier</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">Points</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">Visits</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">Total Spent</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">Credit Due</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {customers.map((c) => (
-                    <tr key={c._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{c.phone || "-"}</td>
-                      <td className="px-4 py-3 text-gray-600">{c.email || "-"}</td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{c.address || "-"}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`font-medium ${c.creditBalance > 0 ? "text-red-600" : "text-gray-600"}`}>
-                          Rs. {(c.creditBalance || 0).toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => openEdit(c)} className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors text-blue-600">
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { if (window.confirm(`Delete "${c.name}"?`)) deleteMut.mutate(c._id); }}
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-gray-50">
+                  {customers.map(customer => {
+                    const tier = TIER_CONFIG[customer.tier] || TIER_CONFIG.bronze
+
+                    return (
+                      <tr key={customer._id} className="transition-colors hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{customer.name}</p>
+                          <p className="text-xs text-gray-400">{customer.email || customer.address || '-'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{customer.phone || '-'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${tier.bg}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${tier.dot}`} />
+                            {tier.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-indigo-600">{customer.loyaltyPoints || 0}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{customer.visitCount || 0}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">Rs. {(customer.totalSpent || 0).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-medium ${customer.creditBalance > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                            Rs. {(customer.creditBalance || 0).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => openEdit(customer)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50">
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete "${customer.name}"?`)) deleteMut.mutate(customer._id)
+                              }}
+                              className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -154,45 +216,84 @@ const CustomerManagement = () => {
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editId ? "Edit Customer" : "Add Customer"}
-              </h2>
-              <button onClick={closeModal} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-base font-semibold text-gray-900">{editId ? 'Edit Customer' : 'Add Customer'}</h2>
+              <button onClick={closeModal} className="rounded-lg p-1 hover:bg-gray-100">
+                <X className="h-5 w-5 text-gray-400" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 p-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <label className="mb-1 block text-xs font-medium text-gray-600">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={event => setForm({ ...form, name: event.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Phone</label>
+                  <input
+                    type="text"
+                    value={form.phone}
+                    onChange={event => setForm({ ...form, phone: event.target.value })}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Birthday</label>
+                  <input
+                    type="date"
+                    value={form.birthday}
+                    onChange={event => setForm({ ...form, birthday: event.target.value })}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <label className="mb-1 block text-xs font-medium text-gray-600">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={event => setForm({ ...form, email: event.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <label className="mb-1 block text-xs font-medium text-gray-600">Address</label>
+                <textarea
+                  value={form.address}
+                  onChange={event => setForm({ ...form, address: event.target.value })}
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <input
+                  type="text"
+                  value={form.notes}
+                  onChange={event => setForm({ ...form, notes: event.target.value })}
+                  placeholder="Preferences, notes, or follow-up details"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={closeModal}
-                  className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={createMut.isPending || updateMut.isPending}
-                  className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                  {createMut.isPending || updateMut.isPending ? "Saving..." : editId ? "Update" : "Create"}
+              <div className="flex justify-end gap-3 pt-1">
+                <button type="button" onClick={closeModal} className="rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMut.isPending || updateMut.isPending}
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {createMut.isPending || updateMut.isPending ? 'Saving...' : editId ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>
@@ -200,7 +301,5 @@ const CustomerManagement = () => {
         </div>
       )}
     </div>
-  );
-};
-
-export default CustomerManagement;
+  )
+}

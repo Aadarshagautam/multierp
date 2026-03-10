@@ -7,6 +7,12 @@ import {
 } from 'lucide-react'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
+import {
+  PAYMENT_METHOD_LABELS,
+  TAX_REGISTRATION_LABEL,
+  formatCurrencyNpr,
+  formatDateNepal,
+} from '../utils/nepal.js'
 
 const InvoiceDetailPage = () => {
   const { id } = useParams()
@@ -14,18 +20,11 @@ const InvoiceDetailPage = () => {
   const [invoice, setInvoice] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchInvoice()
-  }, [id])
-
   const formatDate = (dateStr) => {
-    if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    if (Number.isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('en-IN')
+    return formatDateNepal(dateStr)
   }
 
-  const fetchInvoice = async () => {
+  const fetchInvoice = React.useCallback(async () => {
     try {
       setLoading(true)
       const res = await api.get(`/invoices/${id}`)
@@ -36,13 +35,17 @@ const InvoiceDetailPage = () => {
       }
       toast.error('Invoice not found')
       navigate('/invoices')
-    } catch (error) {
+    } catch {
       toast.error('Failed to load invoice')
       navigate('/invoices')
     } finally {
       setLoading(false)
     }
-  }
+  }, [id, navigate])
+
+  useEffect(() => {
+    fetchInvoice()
+  }, [fetchInvoice])
 
   const downloadPDF = async () => {
     try {
@@ -56,7 +59,7 @@ const InvoiceDetailPage = () => {
       link.remove()
       window.URL.revokeObjectURL(url)
       toast.success('PDF downloaded!')
-    } catch (error) {
+    } catch {
       toast.error('Failed to generate PDF')
     }
   }
@@ -71,7 +74,7 @@ const InvoiceDetailPage = () => {
         }
         toast.success(`Invoice marked as ${status}`)
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update status')
     }
   }
@@ -84,7 +87,7 @@ const InvoiceDetailPage = () => {
         toast.success('Invoice deleted')
         navigate('/invoices')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete invoice')
     }
   }
@@ -214,7 +217,7 @@ const InvoiceDetailPage = () => {
                 )}
                 {invoice.customerGstin && (
                   <p className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                    <Hash className="w-4 h-4" /> GSTIN: {invoice.customerGstin}
+                    <Hash className="w-4 h-4" /> {TAX_REGISTRATION_LABEL}: {invoice.customerGstin}
                   </p>
                 )}
               </div>
@@ -236,7 +239,7 @@ const InvoiceDetailPage = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Payment:</span>
-                  <span className="text-sm font-medium text-gray-900 capitalize">{invoice.paymentMethod?.replace('_', ' ')}</span>
+                  <span className="text-sm font-medium text-gray-900">{PAYMENT_METHOD_LABELS[invoice.paymentMethod] || invoice.paymentMethod}</span>
                 </div>
                 {invoice.withoutVat && (
                   <div className="flex justify-between">
@@ -276,12 +279,12 @@ const InvoiceDetailPage = () => {
                         {item.sku && <p className="text-xs text-gray-500">SKU: {item.sku}</p>}
                       </td>
                       <td className="px-6 py-4 text-center text-sm text-gray-900">{item.quantity}</td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-900">{'\u20B9'}{item.unitPrice.toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-900">{formatCurrencyNpr(item.unitPrice)}</td>
                       <td className="px-6 py-4 text-center text-sm text-gray-600">{invoice.withoutVat ? '0' : item.vatRate}%</td>
                       <td className="px-6 py-4 text-right text-sm text-gray-600">
-                        {item.discountAmount > 0 ? `\u20B9${item.discountAmount.toLocaleString('en-IN')}` : '-'}
+                        {item.discountAmount > 0 ? formatCurrencyNpr(item.discountAmount) : '-'}
                       </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">{'\u20B9'}{item.lineTotal.toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">{formatCurrencyNpr(item.lineTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -306,20 +309,20 @@ const InvoiceDetailPage = () => {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">{'\u20B9'}{invoice.subtotal.toLocaleString('en-IN')}</span>
+                <span className="font-medium text-gray-900">{formatCurrencyNpr(invoice.subtotal)}</span>
               </div>
 
               {invoice.totalItemDiscount > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Item Discounts</span>
-                  <span className="font-medium text-red-600">-{'\u20B9'}{invoice.totalItemDiscount.toLocaleString('en-IN')}</span>
+                  <span className="font-medium text-red-600">- {formatCurrencyNpr(invoice.totalItemDiscount)}</span>
                 </div>
               )}
 
               {!invoice.withoutVat && invoice.totalVat > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Total VAT</span>
-                  <span className="font-medium text-gray-900">{'\u20B9'}{invoice.totalVat.toLocaleString('en-IN')}</span>
+                  <span className="font-medium text-gray-900">{formatCurrencyNpr(invoice.totalVat)}</span>
                 </div>
               )}
 
@@ -329,14 +332,14 @@ const InvoiceDetailPage = () => {
                     Overall Discount
                     {invoice.overallDiscountType === 'percentage' && ` (${invoice.overallDiscountValue}%)`}
                   </span>
-                  <span className="font-medium text-red-600">-{'\u20B9'}{invoice.overallDiscountAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-medium text-red-600">- {formatCurrencyNpr(invoice.overallDiscountAmount)}</span>
                 </div>
               )}
 
               <div className="border-t border-gray-200 pt-3 mt-3">
                 <div className="flex justify-between">
                   <span className="text-lg font-bold text-gray-900">Grand Total</span>
-                  <span className="text-2xl font-bold text-indigo-600">{'\u20B9'}{invoice.grandTotal.toLocaleString('en-IN')}</span>
+                  <span className="text-2xl font-bold text-indigo-600">{formatCurrencyNpr(invoice.grandTotal)}</span>
                 </div>
               </div>
             </div>

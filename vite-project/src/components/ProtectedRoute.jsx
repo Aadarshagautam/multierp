@@ -1,6 +1,8 @@
 import React, { useContext } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { AppContext } from '../context/AppContext'
+import { ShieldCheck } from 'lucide-react'
+import AppContext from '../context/app-context.js'
+import StatePanel from './StatePanel.jsx'
 
 const ProtectedRoute = ({ children }) => {
   const { isLoggedin, loading, hasCheckedAuth } = useContext(AppContext)
@@ -8,8 +10,13 @@ const ProtectedRoute = ({ children }) => {
 
   if (!hasCheckedAuth || loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-10 h-10 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+      <div className="page-shell">
+        <StatePanel
+          icon={ShieldCheck}
+          tone="teal"
+          title="Checking workspace access"
+          message="Verifying your session, branch, and permissions before the workspace opens."
+        />
       </div>
     )
   }

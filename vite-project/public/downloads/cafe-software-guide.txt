@@ -1,0 +1,38 @@
+Cafe Software Starter Guide
+
+Product:
+CommerceOS Cafe Software
+
+What this software is for:
+- Coffee shops
+- Cafes
+- Bakeries
+- Fast counter service businesses
+
+Core modules:
+- Fast POS billing
+- Customer loyalty
+- Customer management
+- Stock alerts
+- Shift and register control
+- Accounting and sales reports
+
+Staff roles:
+- Manager: pricing, branch overview, repeat-customer review
+- Accountant: cash summary, supplier bills, reporting
+- Cashier: fast billing, loyalty points, shift handling
+
+Branch support:
+- One owner account for many cafe branches
+- Separate cashier, manager, and accountant by branch
+- Central branch comparison
+
+How to start:
+1. Create your account.
+2. Create your cafe branch.
+3. Add products, combos, taxes, and payment methods.
+4. Set loyalty rules and assign staff roles.
+5. Start billing from the POS screen.
+
+Use the web version:
+Open the app and sign in from the CommerceOS login page.

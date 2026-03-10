@@ -1,15 +1,12 @@
 import React, { useContext, useEffect } from 'react'
-import axios from 'axios'
-import { AppContext } from '../../context/AppContext'
-import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import api from '../../lib/api.js'
+import AppContext from '../../context/app-context.js'
 
 const EmailVerify = () => {
-  axios.defaults.withCredentials = true;
-
-  const { backendUrl, isLoggedin, userData, getUserData } = useContext(AppContext)
+  const { isLoggedin, userData, getUserData } = useContext(AppContext)
   const navigate = useNavigate()
-
   const inputRef = React.useRef([])
 
   const handleInput = (e, index) => {
@@ -37,10 +34,9 @@ const EmailVerify = () => {
   const onSubmitHandler = async (e) => {
     try {
       e.preventDefault()
-      const otpArray = inputRef.current.map(input => input.value)
-      const otp = otpArray.join('')
-      const { data } = await axios.post(backendUrl + '/api/auth/verify-account', { otp }) // ✅ Fixed: past to post
-      
+      const otp = inputRef.current.map((input) => input.value).join('')
+      const { data } = await api.post('/auth/verify-account', { otp })
+
       if (data.success) {
         toast.success(data.message)
         getUserData()
@@ -54,33 +50,36 @@ const EmailVerify = () => {
   }
 
   useEffect(() => {
-    if (isLoggedin && userData && userData.isAccountVerified) {
+    if (isLoggedin && userData?.isAccountVerified) {
       navigate('/')
     }
-  }, [isLoggedin, userData])
+  }, [isLoggedin, navigate, userData])
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-6 sm:px-0 bg-gradient-to-br from-blue-200 to-purple-400">
-      <form onSubmit={onSubmitHandler} className='bg-slate-900 p-8 rounded-lg shadow-lg w-96 text-sm'>
-        <h1 className='text-white text-2xl font-semibold text-center mb-4'>Email Verify OTP</h1>
-        <p className='text-center mb-6 text-indigo-300'>
-          Enter the 6-digit code sent to your email address to verify your account.
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-100 via-orange-50 to-teal-100 px-6 sm:px-0">
+      <form onSubmit={onSubmitHandler} className="w-96 rounded-3xl border border-white/70 bg-slate-950/95 p-8 text-sm shadow-2xl shadow-slate-900/20 backdrop-blur">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300">Account Security</p>
+        <h1 className="mt-4 text-center text-2xl font-semibold text-white">Verify your email</h1>
+        <p className="mb-6 mt-3 text-center text-slate-300">
+          Enter the 6-digit code sent to your inbox to finish onboarding.
         </p>
-        <div className='flex justify-between mb-8' onPaste={handlePaste}>
+        <div className="mb-8 flex justify-between" onPaste={handlePaste}>
           {Array(6).fill(0).map((_, index) => (
             <input
               key={index}
               type="text"
-              maxLength='1'
+              maxLength="1"
               required
-              className='w-12 h-12 bg-[#333A5C] text-white text-center text-xl rounded-md'
-              ref={el => inputRef.current[index] = el}
+              className="h-12 w-12 rounded-2xl border border-slate-700 bg-slate-900 text-center text-xl text-white shadow-inner outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-200/40"
+              ref={(el) => {
+                inputRef.current[index] = el
+              }}
               onInput={(e) => handleInput(e, index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
             />
           ))}
         </div>
-        <button className='w-full py-3 bg-gradient-to-r from-indigo-500 to-indigo-900 text-white rounded-full'>
+        <button className="w-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-teal-500 py-3 font-semibold text-slate-950 transition hover:brightness-105">
           Verify email
         </button>
       </form>
@@ -88,4 +87,4 @@ const EmailVerify = () => {
   )
 }
 
-export default EmailVerify;
+export default EmailVerify

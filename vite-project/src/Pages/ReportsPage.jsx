@@ -32,11 +32,7 @@ const ReportsPage = () => {
     todos: []
   })
 
-  useEffect(() => {
-    fetchReportData()
-  }, [dateRange])
-
-  const fetchReportData = async () => {
+  const fetchReportData = React.useCallback(async () => {
     try {
       setLoading(true)
       
@@ -76,7 +72,11 @@ const ReportsPage = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dateRange.endDate, dateRange.startDate])
+
+  useEffect(() => {
+    fetchReportData()
+  }, [fetchReportData])
 
   const exportToCSV = () => {
     // Create CSV content

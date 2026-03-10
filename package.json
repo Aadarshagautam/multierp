@@ -1,0 +1,10 @@
+{
+  "name": "commerceos-workspace",
+  "private": true,
+  "scripts": {
+    "lint": "npm --prefix backend run lint && npm --prefix vite-project run lint",
+    "test": "npm --prefix backend run test && npm --prefix vite-project run test",
+    "build": "npm --prefix vite-project run build",
+    "smoke": "npm run lint && npm run test && npm run build"
+  }
+}

@@ -1,166 +1,175 @@
-import React, { useState, useContext } from 'react'
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, LayoutGrid, Bell, LogOut, User, Mail, LayoutDashboard, ChevronRight } from 'lucide-react'
-import { AppContext } from '../context/AppContext'
-import { apps, getActiveApp, isMenuItemActive } from '../config/sidebarConfig'
-import axios from 'axios'
+import React, { useContext, useState } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Bell, Building2, ChevronRight, LayoutGrid, LogOut, Mail, Menu, Sparkles, User, X } from 'lucide-react'
 import toast from 'react-hot-toast'
+import AppContext from '../context/app-context.js'
+import { getActiveAppForBusiness, getAppsForBusiness, getBusinessMeta, isMenuItemActive } from '../config/businessConfigs'
+import api from '../lib/api.js'
 
-/* ─── accent color lookup (tailwind classes) ─── */
 const accentClasses = {
-  violet:  { bg: 'bg-violet-50',  text: 'text-violet-600',  border: 'border-violet-500',  icon: 'bg-violet-100 text-violet-600' },
-  blue:    { bg: 'bg-blue-50',    text: 'text-blue-600',    border: 'border-blue-500',    icon: 'bg-blue-100 text-blue-600' },
-  orange:  { bg: 'bg-orange-50',  text: 'text-orange-600',  border: 'border-orange-500',  icon: 'bg-orange-100 text-orange-600' },
-  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-500', icon: 'bg-emerald-100 text-emerald-600' },
-  green:   { bg: 'bg-green-50',   text: 'text-green-600',   border: 'border-green-500',   icon: 'bg-green-100 text-green-600' },
-  teal:    { bg: 'bg-teal-50',    text: 'text-teal-600',    border: 'border-teal-500',    icon: 'bg-teal-100 text-teal-600' },
-  gray:    { bg: 'bg-gray-100',   text: 'text-gray-600',    border: 'border-gray-500',    icon: 'bg-gray-200 text-gray-600' },
+  amber: { bg: 'bg-amber-50', text: 'text-amber-900', border: 'border-amber-200', icon: 'bg-amber-100 text-amber-700' },
+  teal: { bg: 'bg-emerald-50', text: 'text-emerald-900', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700' },
+  blue: { bg: 'bg-sky-50', text: 'text-sky-900', border: 'border-sky-200', icon: 'bg-sky-100 text-sky-700' },
+  rose: { bg: 'bg-rose-50', text: 'text-rose-900', border: 'border-rose-200', icon: 'bg-rose-100 text-rose-700' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-900', border: 'border-orange-200', icon: 'bg-orange-100 text-orange-700' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-900', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700' },
+  slate: { bg: 'bg-stone-100', text: 'text-stone-800', border: 'border-stone-200', icon: 'bg-stone-200 text-stone-700' },
 }
 
 const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
-  const activeApp = getActiveApp(location.pathname)
+  const { orgBusinessType } = useContext(AppContext)
+  const activeApp = getActiveAppForBusiness(location.pathname, orgBusinessType)
 
   return (
     <>
-      <TopBar
-        activeApp={activeApp}
-        sidebarOpen={sidebarOpen}
-        toggleSidebar={() => setSidebarOpen(prev => !prev)}
-      />
-      <OdooSidebar
+      <TopBar activeApp={activeApp} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(previous => !previous)} />
+      <Sidebar
         activeApp={activeApp}
         pathname={location.pathname}
         isOpen={sidebarOpen}
         closeSidebar={() => setSidebarOpen(false)}
+        businessType={orgBusinessType}
       />
       <Outlet />
     </>
   )
 }
 
-/* ═══════════════════════════════════════════════════════
-   TOP BAR
-   ═══════════════════════════════════════════════════════ */
 const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
   const navigate = useNavigate()
-  const {
-    userData, backendUrl, setUserData, setIsLoggedin,
-    isLoggedin, currentOrgName,
-  } = useContext(AppContext)
+  const { userData, setUserData, setIsLoggedin, isLoggedin, currentOrgName } = useContext(AppContext)
 
   const sendVerificationOtp = async () => {
     try {
-      axios.defaults.withCredentials = true
-      const { data } = await axios.post(backendUrl + '/api/auth/send-verify-opt')
-      data.success ? toast.success(data.message) : toast.error(data.message)
-      if (data.success) navigate('/email-verifty')
-    } catch (e) { toast.error(e.message) }
+      const { data } = await api.post('/auth/send-verify-opt')
+      if (data.success) {
+        toast.success(data.message)
+        navigate('/email-verifty')
+      } else {
+        toast.error(data.message)
+      }
+    } catch (error) {
+      toast.error(error.message)
+    }
   }
 
   const logout = async () => {
     try {
-      axios.defaults.withCredentials = true
-      const { data } = await axios.post(backendUrl + '/api/auth/logout')
+      const { data } = await api.post('/auth/logout')
       if (data.success) {
         setIsLoggedin(false)
         setUserData(null)
         toast.success('Logged out successfully')
         navigate('/login')
       }
-    } catch (e) { toast.error(e.message) }
+    } catch (error) {
+      toast.error(error.message)
+    }
   }
 
   return (
-    <header className="sticky top-0 z-50 h-16 bg-white border-b border-gray-200">
-      <div className="flex items-center justify-between h-full px-4 lg:pl-[17rem]">
-        {/* Left */}
-        <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-[rgba(255,250,242,0.88)] backdrop-blur-xl">
+      <div className="flex h-16 items-center justify-between gap-4 px-4 lg:pl-[17rem] lg:pr-6">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={toggleSidebar}
-            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 lg:hidden"
           >
-            {sidebarOpen ? <X className="w-5 h-5 text-gray-600" /> : <Menu className="w-5 h-5 text-gray-600" />}
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          {/* Logo */}
-          <Link to="/dashboard" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
-              <span className="text-white font-bold text-sm">T</span>
+          <Link to="/home" className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900 via-emerald-700 to-amber-500 text-sm font-bold text-white shadow-sm">
+              CO
             </div>
-            <span className="hidden sm:block text-base font-bold text-gray-900">ThinkBoard</span>
+            <div className="hidden min-w-0 sm:block">
+              <p className="truncate text-sm font-semibold text-slate-900">CommerceOS</p>
+              <p className="truncate text-xs text-slate-500">Nepal Business Software</p>
+            </div>
           </Link>
 
-          {/* Breadcrumb-style active app indicator */}
           {activeApp && (
-            <div className="hidden md:flex items-center gap-1.5 text-sm text-gray-400 ml-2">
-              <ChevronRight className="w-4 h-4" />
-              <span className="font-medium text-gray-700">{activeApp.name}</span>
+            <div className="hidden min-w-0 items-center gap-3 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5 md:flex">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-800">{activeApp.name}</p>
+                <p className="truncate text-xs text-slate-500">{activeApp.description}</p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Right */}
         <div className="flex items-center gap-2">
+          {currentOrgName && (
+            <div className="hidden items-center gap-2 rounded-full border border-stone-200 bg-white/80 px-3 py-2 text-sm text-slate-600 xl:flex">
+              <Building2 className="h-4 w-4 text-slate-400" />
+              <span className="max-w-[11rem] truncate">{currentOrgName}</span>
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">NPR</span>
+            </div>
+          )}
+
           {isLoggedin ? (
             <>
               <Link
                 to="/apps"
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="All Apps"
+                className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+                title="Open work areas"
               >
-                <LayoutGrid className="w-5 h-5 text-gray-500" />
+                <LayoutGrid className="h-5 w-5" />
               </Link>
 
-              <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <Bell className="w-5 h-5 text-gray-500" />
-                {userData && !userData.isAccountVerified && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-                )}
+              <button className="relative rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50">
+                <Bell className="h-5 w-5" />
+                {userData && !userData.isAccountVerified && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}
               </button>
 
-              {/* User dropdown */}
-              <div className="relative group">
-                <button className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                  <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-semibold">
+              <div className="group relative">
+                <button className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 transition hover:bg-slate-50">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900 via-emerald-700 to-amber-500 text-sm font-semibold text-white">
                     {userData?.username?.[0]?.toUpperCase() || 'U'}
                   </div>
-                  <span className="hidden md:block text-sm font-medium text-gray-700 max-w-[100px] truncate">
-                    {userData?.username || 'User'}
-                  </span>
+                  <div className="hidden min-w-0 text-left md:block">
+                    <p className="max-w-[8rem] truncate text-sm font-medium text-slate-900">{userData?.username || 'User'}</p>
+                    <p className="max-w-[8rem] truncate text-xs text-slate-500">{currentOrgName || 'Workspace'}</p>
+                  </div>
                 </button>
 
-                <div className="absolute right-0 mt-1 w-64 bg-white rounded-xl shadow-xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{userData?.username || 'User'}</p>
-                    <p className="text-xs text-gray-500 truncate">{userData?.email}</p>
-                    {currentOrgName && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{currentOrgName}</p>
-                    )}
+                <div className="invisible absolute right-0 mt-2 w-72 overflow-hidden rounded-3xl border border-slate-200 bg-white opacity-0 shadow-2xl transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                  <div className="border-b border-slate-100 px-4 py-4">
+                    <p className="truncate text-sm font-semibold text-slate-900">{userData?.username || 'User'}</p>
+                    <p className="truncate text-xs text-slate-500">{userData?.email}</p>
+                    {currentOrgName && <p className="truncate text-xs text-slate-400">{currentOrgName}</p>}
                   </div>
 
-                  <div className="p-1.5">
+                  <div className="p-2">
                     {userData && !userData.isAccountVerified && (
                       <button
                         onClick={sendVerificationOtp}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-amber-50"
                       >
-                        <Mail className="w-4 h-4 text-indigo-500" /> Verify Email
+                        <Mail className="h-4 w-4 text-amber-500" />
+                        Verify email
                       </button>
                     )}
+
                     <Link
                       to="/dashboard"
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
                     >
-                      <User className="w-4 h-4 text-gray-500" /> My Profile
+                      <User className="h-4 w-4 text-slate-500" />
+                      My profile
                     </Link>
-                    <div className="h-px bg-gray-100 my-1" />
+
+                  <div className="my-2 h-px bg-stone-100" />
+
                     <button
                       onClick={logout}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-rose-600 transition hover:bg-rose-50"
                     >
-                      <LogOut className="w-4 h-4" /> Logout
+                      <LogOut className="h-4 w-4" />
+                      Logout
                     </button>
                   </div>
                 </div>
@@ -169,7 +178,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
           ) : (
             <button
               onClick={() => navigate('/login')}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+              className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
             >
               Login
             </button>
@@ -180,134 +189,125 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
   )
 }
 
-/* ═══════════════════════════════════════════════════════
-   SIDEBAR
-   ═══════════════════════════════════════════════════════ */
-const OdooSidebar = ({ activeApp, pathname, isOpen, closeSidebar }) => {
+const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) => {
   const navigate = useNavigate()
+  const { hasPermission } = useContext(AppContext)
+  const apps = getAppsForBusiness(businessType)
+  const businessMeta = getBusinessMeta(businessType)
 
-  // Separate settings from the rest
-  const mainApps = apps.filter(a => a.id !== 'settings')
-  const settingsApp = apps.find(a => a.id === 'settings')
+  const visibleApps = apps.filter(app => app.id !== 'settings').filter(app => !app.permission || hasPermission(app.permission))
+  const settingsApp = apps.find(app => app.id === 'settings')
+  const SettingsIcon = settingsApp?.icon
+  const showSettings = settingsApp && (!settingsApp.permission || hasPermission(settingsApp.permission))
 
-  const handleAppClick = (app) => {
+  const handleAppClick = app => {
     navigate(app.basePath)
     closeSidebar()
   }
 
-  const handleMenuClick = (path) => {
+  const handleMenuClick = path => {
     navigate(path)
     closeSidebar()
   }
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
-          onClick={closeSidebar}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 z-30 bg-slate-950/25 lg:hidden" onClick={closeSidebar} />}
 
-      <aside className={`
-        fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200
-        z-40 flex flex-col transition-transform duration-200
-        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Dashboard quick link */}
-        <div className="px-3 pt-4 pb-2">
-          <Link
-            to="/dashboard"
-            onClick={closeSidebar}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-              pathname === '/dashboard'
-                ? 'bg-indigo-50 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="text-sm font-medium">Dashboard</span>
-          </Link>
+      <aside
+        className={`fixed left-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r border-stone-200 bg-[rgba(255,250,242,0.94)] backdrop-blur transition-transform duration-200 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        <div className="px-4 pt-4">
+          <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">{businessMeta.shortLabel}</p>
+            <h2 className="mt-1.5 text-sm font-semibold text-slate-900">{businessMeta.productName}</h2>
+            <p className="mt-1 text-xs leading-5 text-slate-600">{businessMeta.workspaceSummary}</p>
+          </div>
         </div>
 
-        <div className="h-px bg-gray-100 mx-4" />
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Work Areas</div>
 
-        {/* App list */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
-          {mainApps.map(app => {
-            const Icon = app.icon
-            const isActive = activeApp?.id === app.id
-            const accent = accentClasses[app.accent] || accentClasses.gray
+          <div className="space-y-1.5">
+            {visibleApps.map(app => {
+              const Icon = app.icon
+              const accent = accentClasses[app.accent] || accentClasses.slate
+              const visibleMenu = app.menu.filter(item => !item.permission || hasPermission(item.permission))
+              const isActive = activeApp?.id === app.id
 
-            return (
-              <div key={app.id}>
-                {/* App row */}
-                <button
-                  onClick={() => handleAppClick(app)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                    isActive
-                      ? `${accent.bg} ${accent.text} font-semibold`
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                    isActive ? accent.icon : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <span className="text-sm">{app.name}</span>
-                  {isActive && app.menu.length > 1 && (
-                    <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-40 rotate-90" />
+              return (
+                <div key={app.id}>
+                  <button
+                    onClick={() => handleAppClick(app)}
+                    className={`w-full rounded-3xl border px-3 py-3 text-left transition ${
+                      isActive ? `${accent.bg} ${accent.border} shadow-sm` : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isActive ? accent.icon : 'bg-slate-100 text-slate-500'}`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm font-semibold ${isActive ? accent.text : 'text-slate-800'}`}>{app.name}</p>
+                          {visibleMenu.length > 1 && (
+                            <ChevronRight className={`ml-auto h-4 w-4 transition ${isActive ? 'rotate-90 text-slate-400' : 'text-slate-300'}`} />
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{app.description}</p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {isActive && visibleMenu.length > 0 && (
+                    <div className="mt-1 space-y-1 pl-14 pr-1">
+                      {visibleMenu.map(item => {
+                        const ItemIcon = item.icon
+                        const menuActive = isMenuItemActive(item, pathname)
+
+                        return (
+                          <button
+                            key={item.path}
+                            onClick={() => handleMenuClick(item.path)}
+                            className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${
+                              menuActive ? `${accent.border} bg-white ${accent.text} shadow-sm` : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                            }`}
+                          >
+                            <ItemIcon className="h-4 w-4 shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   )}
-                </button>
-
-                {/* Submenu (expanded only for active app) */}
-                {isActive && app.menu.length > 1 && (
-                  <div className="ml-5 pl-4 border-l-2 border-gray-200 mt-1 mb-2 space-y-0.5">
-                    {app.menu.map(item => {
-                      const ItemIcon = item.icon
-                      const menuActive = isMenuItemActive(item, pathname)
-
-                      return (
-                        <button
-                          key={item.path}
-                          onClick={() => handleMenuClick(item.path)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                            menuActive
-                              ? `${accent.text} font-medium bg-white shadow-sm border border-gray-100`
-                              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <ItemIcon className="w-4 h-4" />
-                          <span>{item.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                </div>
+              )
+            })}
+          </div>
         </nav>
 
-        {/* Settings — pinned at bottom */}
-        {settingsApp && (
-          <div className="border-t border-gray-100 px-3 py-3">
+        {showSettings && (
+          <div className="border-t border-slate-200 px-3 py-3">
             <button
               onClick={() => handleAppClick(settingsApp)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+              className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                 activeApp?.id === 'settings'
-                  ? 'bg-gray-100 text-gray-700 font-semibold'
-                  : 'text-gray-500 hover:bg-gray-50'
+                  ? 'border-indigo-200 bg-indigo-50 text-indigo-800 shadow-sm'
+                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'
               }`}
             >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                activeApp?.id === 'settings' ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-400'
-              }`}>
-                <settingsApp.icon className="w-4 h-4" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-200 text-slate-700">
+                  {SettingsIcon && <SettingsIcon className="h-5 w-5" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Settings</p>
+                  <p className="text-xs text-slate-500">Company setup and access control</p>
+                </div>
               </div>
-              <span className="text-sm">Settings</span>
             </button>
           </div>
         )}

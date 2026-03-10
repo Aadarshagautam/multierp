@@ -1,17 +1,29 @@
-import React, { useState, useEffect, useContext, useRef } from 'react'
-import axios from 'axios'
-import { AppContext } from '../context/AppContext'
+import React, { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { Plus, Search, GripVertical, DollarSign, Phone, Mail, Building2, X, ChevronDown, Trash2, ArrowRightLeft } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  GripVertical,
+  DollarSign,
+  Phone,
+  Mail,
+  Building2,
+  X,
+  ChevronDown,
+  Trash2,
+  ArrowRightLeft,
+} from 'lucide-react'
+import api from '../lib/api.js'
+import { formatShortCurrencyNpr } from '../utils/nepal.js'
 
 const STAGES = [
-  { key: 'new', label: 'New', color: 'bg-blue-500', lightColor: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { key: 'contacted', label: 'Contacted', color: 'bg-yellow-500', lightColor: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  { key: 'qualified', label: 'Qualified', color: 'bg-indigo-500', lightColor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  { key: 'proposal', label: 'Proposal', color: 'bg-purple-500', lightColor: 'bg-purple-50 text-purple-700 border-purple-200' },
-  { key: 'negotiation', label: 'Negotiation', color: 'bg-orange-500', lightColor: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { key: 'won', label: 'Won', color: 'bg-green-500', lightColor: 'bg-green-50 text-green-700 border-green-200' },
-  { key: 'lost', label: 'Lost', color: 'bg-red-500', lightColor: 'bg-red-50 text-red-700 border-red-200' },
+  { key: 'new', label: 'New', color: 'bg-blue-500' },
+  { key: 'contacted', label: 'Contacted', color: 'bg-yellow-500' },
+  { key: 'qualified', label: 'Qualified', color: 'bg-indigo-500' },
+  { key: 'proposal', label: 'Proposal', color: 'bg-purple-500' },
+  { key: 'negotiation', label: 'Negotiation', color: 'bg-orange-500' },
+  { key: 'won', label: 'Won', color: 'bg-green-500' },
+  { key: 'lost', label: 'Lost', color: 'bg-red-500' },
 ]
 
 const PRIORITY_COLORS = {
@@ -24,7 +36,6 @@ const PRIORITY_COLORS = {
 const SOURCES = ['website', 'referral', 'social', 'email', 'cold_call', 'advertisement', 'other']
 
 const CRMPage = () => {
-  const { backendUrl } = useContext(AppContext)
   const [leads, setLeads] = useState([])
   const [stats, setStats] = useState(null)
   const [search, setSearch] = useState('')
@@ -34,28 +45,30 @@ const CRMPage = () => {
   const [dragOverStage, setDragOverStage] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${backendUrl}/api/crm`)
+      const { data } = await api.get('/crm')
       setLeads(Array.isArray(data) ? data : [])
-    } catch (err) {
+    } catch {
       toast.error('Failed to fetch leads')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${backendUrl}/api/crm/stats`)
+      const { data } = await api.get('/crm/stats')
       setStats(data)
-    } catch (err) { /* silent */ }
-  }
+    } catch {
+      setStats(null)
+    }
+  }, [])
 
   useEffect(() => {
     fetchLeads()
     fetchStats()
-  }, [])
+  }, [fetchLeads, fetchStats])
 
   const handleDragStart = (e, lead) => {
     setDraggedLead(lead)
@@ -81,185 +94,198 @@ const CRMPage = () => {
       return
     }
 
-    // Optimistic update
-    setLeads(prev => prev.map(l => l._id === draggedLead._id ? { ...l, stage: stageKey } : l))
+    setLeads((prev) => prev.map((lead) => (
+      lead._id === draggedLead._id ? { ...lead, stage: stageKey } : lead
+    )))
 
     try {
-      await axios.patch(`${backendUrl}/api/crm/${draggedLead._id}/stage`, { stage: stageKey })
+      await api.patch(`/crm/${draggedLead._id}/stage`, { stage: stageKey })
       fetchStats()
-    } catch (err) {
+    } catch {
       toast.error('Failed to move lead')
       fetchLeads()
     }
+
     setDraggedLead(null)
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this lead?')) return
+    if (!window.confirm('Delete this lead?')) return
+
     try {
-      await axios.delete(`${backendUrl}/api/crm/${id}`)
-      setLeads(prev => prev.filter(l => l._id !== id))
+      await api.delete(`/crm/${id}`)
+      setLeads((prev) => prev.filter((lead) => lead._id !== id))
       fetchStats()
       toast.success('Lead deleted')
-    } catch (err) {
-      toast.error('Failed to delete')
+    } catch {
+      toast.error('Failed to delete lead')
     }
   }
 
   const handleConvert = async (id) => {
     try {
-      const { data } = await axios.post(`${backendUrl}/api/crm/${id}/convert`)
+      const { data } = await api.post(`/crm/${id}/convert`)
       if (data.success) {
-        toast.success('Lead converted to customer!')
+        toast.success('Lead converted to customer')
         fetchLeads()
         fetchStats()
       } else {
         toast.error(data.message)
       }
-    } catch (err) {
+    } catch {
       toast.error('Conversion failed')
     }
   }
 
   const filteredLeads = search
-    ? leads.filter(l => l.name.toLowerCase().includes(search.toLowerCase()) || l.company?.toLowerCase().includes(search.toLowerCase()) || l.email?.toLowerCase().includes(search.toLowerCase()))
+    ? leads.filter((lead) => (
+      lead.name.toLowerCase().includes(search.toLowerCase())
+      || lead.company?.toLowerCase().includes(search.toLowerCase())
+      || lead.email?.toLowerCase().includes(search.toLowerCase())
+    ))
     : leads
 
-  const getStageLeads = (stageKey) => filteredLeads.filter(l => l.stage === stageKey)
+  const getStageLeads = (stageKey) => filteredLeads.filter((lead) => lead.stage === stageKey)
 
   return (
     <div className="lg:ml-64 mt-16 min-h-screen bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border-b border-gray-200 bg-white px-6 py-4">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">CRM Pipeline</h1>
             {stats && (
-              <p className="text-sm text-gray-500 mt-1">
-                {stats.total} leads &middot; Expected: ₹{stats.totalExpectedRevenue?.toLocaleString('en-IN')} &middot; Weighted: ₹{Math.round(stats.weightedRevenue || 0).toLocaleString('en-IN')}
+              <p className="mt-1 text-sm text-gray-500">
+                {stats.total} leads | Expected: {formatShortCurrencyNpr(stats.totalExpectedRevenue)} | Weighted: {formatShortCurrencyNpr(Math.round(stats.weightedRevenue || 0))}
               </p>
             )}
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search leads..."
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-64"
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-64 rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-transparent focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <button
-              onClick={() => { setEditLead(null); setShowForm(true) }}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+              onClick={() => {
+                setEditLead(null)
+                setShowForm(true)
+              }}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
             >
-              <Plus className="w-4 h-4" /> Add Lead
+              <Plus className="h-4 w-4" /> Add Lead
             </button>
           </div>
         </div>
       </div>
 
-      {/* Kanban Board */}
-      <div className="p-4 overflow-x-auto">
-        <div className="flex gap-4 min-w-max">
-          {STAGES.map(stage => {
+      <div className="overflow-x-auto p-4">
+        <div className="flex min-w-max gap-4">
+          {STAGES.map((stage) => {
             const stageLeads = getStageLeads(stage.key)
-            const stageRevenue = stageLeads.reduce((sum, l) => sum + (l.expectedRevenue || 0), 0)
+            const stageRevenue = stageLeads.reduce((sum, lead) => sum + (lead.expectedRevenue || 0), 0)
 
             return (
               <div
                 key={stage.key}
-                className={`w-72 flex-shrink-0 rounded-xl transition-all ${dragOverStage === stage.key ? 'ring-2 ring-indigo-400 bg-indigo-50/50' : 'bg-gray-100'}`}
-                onDragOver={e => handleDragOver(e, stage.key)}
+                className={`w-72 flex-shrink-0 rounded-xl transition-all ${dragOverStage === stage.key ? 'bg-indigo-50/50 ring-2 ring-indigo-400' : 'bg-gray-100'}`}
+                onDragOver={(e) => handleDragOver(e, stage.key)}
                 onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, stage.key)}
+                onDrop={(e) => handleDrop(e, stage.key)}
               >
-                {/* Column Header */}
-                <div className="p-3 border-b border-gray-200">
+                <div className="border-b border-gray-200 p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${stage.color}`} />
+                      <div className={`h-3 w-3 rounded-full ${stage.color}`} />
                       <span className="text-sm font-semibold text-gray-700">{stage.label}</span>
-                      <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{stageLeads.length}</span>
+                      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">{stageLeads.length}</span>
                     </div>
-                    <span className="text-xs text-gray-500">₹{stageRevenue.toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-gray-500">{formatShortCurrencyNpr(stageRevenue)}</span>
                   </div>
                 </div>
 
-                {/* Cards */}
-                <div className="p-2 space-y-2 min-h-[200px] max-h-[calc(100vh-280px)] overflow-y-auto">
+                <div className="max-h-[calc(100vh-280px)] min-h-[200px] space-y-2 overflow-y-auto p-2">
                   {loading ? (
                     <div className="flex justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-indigo-300 rounded-full border-t-transparent animate-spin" />
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-300 border-t-transparent" />
                     </div>
                   ) : stageLeads.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm">
+                    <div className="py-8 text-center text-sm text-gray-400">
                       {dragOverStage === stage.key ? 'Drop here' : 'No leads'}
                     </div>
                   ) : (
-                    stageLeads.map(lead => (
+                    stageLeads.map((lead) => (
                       <div
                         key={lead._id}
                         draggable
-                        onDragStart={e => handleDragStart(e, lead)}
-                        className={`bg-white rounded-lg border border-gray-200 p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group ${draggedLead?._id === lead._id ? 'opacity-50 scale-95' : ''}`}
+                        onDragStart={(e) => handleDragStart(e, lead)}
+                        className={`group cursor-grab rounded-lg border border-gray-200 bg-white p-3 transition-all hover:shadow-md active:cursor-grabbing ${draggedLead?._id === lead._id ? 'scale-95 opacity-50' : ''}`}
                       >
-                        <div className="flex items-start justify-between mb-2">
+                        <div className="mb-2 flex items-start justify-between">
                           <div className="flex items-center gap-1">
-                            <GripVertical className="w-3 h-3 text-gray-300" />
-                            <h3 className="text-sm font-semibold text-gray-800 line-clamp-1">{lead.name}</h3>
+                            <GripVertical className="h-3 w-3 text-gray-300" />
+                            <h3 className="line-clamp-1 text-sm font-semibold text-gray-800">{lead.name}</h3>
                           </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { setEditLead(lead); setShowForm(true) }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
-                              <ChevronDown className="w-3 h-3" />
+                          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              onClick={() => {
+                                setEditLead(lead)
+                                setShowForm(true)
+                              }}
+                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                            >
+                              <ChevronDown className="h-3 w-3" />
                             </button>
-                            <button onClick={() => handleDelete(lead._id)} className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500">
-                              <Trash2 className="w-3 h-3" />
+                            <button
+                              onClick={() => handleDelete(lead._id)}
+                              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                            >
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
 
                         {lead.company && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                            <Building2 className="w-3 h-3" /> {lead.company}
+                          <div className="mb-1 flex items-center gap-1 text-xs text-gray-500">
+                            <Building2 className="h-3 w-3" /> {lead.company}
                           </div>
                         )}
 
                         {lead.expectedRevenue > 0 && (
-                          <div className="flex items-center gap-1 text-xs text-green-600 font-medium mb-2">
-                            <DollarSign className="w-3 h-3" /> ₹{lead.expectedRevenue.toLocaleString('en-IN')}
+                          <div className="mb-2 flex items-center gap-1 text-xs font-medium text-green-600">
+                            <DollarSign className="h-3 w-3" /> {formatShortCurrencyNpr(lead.expectedRevenue)}
                           </div>
                         )}
 
                         <div className="flex items-center justify-between">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[lead.priority]}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PRIORITY_COLORS[lead.priority]}`}>
                             {lead.priority}
                           </span>
-                          {/* Probability bar */}
                           <div className="flex items-center gap-1">
-                            <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${lead.probability}%` }} />
+                            <div className="h-1.5 w-12 overflow-hidden rounded-full bg-gray-200">
+                              <div className="h-full rounded-full bg-indigo-500" style={{ width: `${lead.probability}%` }} />
                             </div>
                             <span className="text-[10px] text-gray-400">{lead.probability}%</span>
                           </div>
                         </div>
 
-                        {/* Contact icons */}
-                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
-                          {lead.email && <Mail className="w-3 h-3 text-gray-400" />}
-                          {lead.phone && <Phone className="w-3 h-3 text-gray-400" />}
+                        <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2">
+                          {lead.email && <Mail className="h-3 w-3 text-gray-400" />}
+                          {lead.phone && <Phone className="h-3 w-3 text-gray-400" />}
                           {stage.key !== 'won' && stage.key !== 'lost' && !lead.customerId && (
                             <button
                               onClick={() => handleConvert(lead._id)}
-                              className="ml-auto flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                              className="ml-auto flex items-center gap-1 text-[10px] font-medium text-indigo-500 hover:text-indigo-700"
                             >
-                              <ArrowRightLeft className="w-3 h-3" /> Convert
+                              <ArrowRightLeft className="h-3 w-3" /> Convert
                             </button>
                           )}
                           {lead.customerId && (
-                            <span className="ml-auto text-[10px] text-green-600 font-medium">Converted</span>
+                            <span className="ml-auto text-[10px] font-medium text-green-600">Converted</span>
                           )}
                         </div>
                       </div>
@@ -272,20 +298,26 @@ const CRMPage = () => {
         </div>
       </div>
 
-      {/* Lead Form Modal */}
       {showForm && (
         <LeadFormModal
           lead={editLead}
-          backendUrl={backendUrl}
-          onClose={() => { setShowForm(false); setEditLead(null) }}
-          onSaved={() => { fetchLeads(); fetchStats(); setShowForm(false); setEditLead(null) }}
+          onClose={() => {
+            setShowForm(false)
+            setEditLead(null)
+          }}
+          onSaved={() => {
+            fetchLeads()
+            fetchStats()
+            setShowForm(false)
+            setEditLead(null)
+          }}
         />
       )}
     </div>
   )
 }
 
-const LeadFormModal = ({ lead, backendUrl, onClose, onSaved }) => {
+const LeadFormModal = ({ lead, onClose, onSaved }) => {
   const [form, setForm] = useState({
     name: lead?.name || '',
     email: lead?.email || '',
@@ -315,19 +347,20 @@ const LeadFormModal = ({ lead, backendUrl, onClose, onSaved }) => {
         ...form,
         expectedRevenue: Number(form.expectedRevenue) || 0,
         probability: Number(form.probability) || 10,
-        tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        tags: form.tags ? form.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
         nextFollowUp: form.nextFollowUp || null,
       }
 
       if (lead) {
-        await axios.put(`${backendUrl}/api/crm/${lead._id}`, payload)
+        await api.put(`/crm/${lead._id}`, payload)
         toast.success('Lead updated')
       } else {
-        await axios.post(`${backendUrl}/api/crm`, payload)
+        await api.post('/crm', payload)
         toast.success('Lead created')
       }
+
       onSaved()
-    } catch (err) {
+    } catch {
       toast.error('Failed to save lead')
     } finally {
       setSaving(false)
@@ -335,54 +368,56 @@ const LeadFormModal = ({ lead, backendUrl, onClose, onSaved }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-gray-200 p-5">
           <h2 className="text-lg font-bold text-gray-900">{lead ? 'Edit Lead' : 'New Lead'}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" required />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Name *</label>
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Phone</label>
+              <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-              <input type="text" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Company</label>
+              <input type="text" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
-              <select value={form.stage} onChange={e => setForm({ ...form, stage: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
-                {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              <label className="mb-1 block text-sm font-medium text-gray-700">Stage</label>
+              <select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+                {STAGES.map((stage) => <option key={stage.key} value={stage.key}>{stage.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Expected Revenue (₹)</label>
-              <input type="number" value={form.expectedRevenue} onChange={e => setForm({ ...form, expectedRevenue: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" min="0" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Expected Revenue (NPR)</label>
+              <input type="number" value={form.expectedRevenue} onChange={(e) => setForm({ ...form, expectedRevenue: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" min="0" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Probability (%)</label>
-              <input type="number" value={form.probability} onChange={e => setForm({ ...form, probability: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" min="0" max="100" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Probability (%)</label>
+              <input type="number" value={form.probability} onChange={(e) => setForm({ ...form, probability: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" min="0" max="100" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
-              <select value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
-                {SOURCES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              <label className="mb-1 block text-sm font-medium text-gray-700">Source</label>
+              <select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+                {SOURCES.map((source) => <option key={source} value={source}>{source.replace('_', ' ')}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Priority</label>
+              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -390,24 +425,24 @@ const LeadFormModal = ({ lead, backendUrl, onClose, onSaved }) => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Next Follow-Up</label>
-              <input type="date" value={form.nextFollowUp} onChange={e => setForm({ ...form, nextFollowUp: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Next Follow-Up</label>
+              <input type="date" value={form.nextFollowUp} onChange={(e) => setForm({ ...form, nextFollowUp: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma separated)</label>
-              <input type="text" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} placeholder="e.g. enterprise, urgent, follow-up" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Tags (comma separated)</label>
+              <input type="text" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="e.g. restaurant, wholesale, follow-up" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 resize-none" />
+              <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
               {saving ? 'Saving...' : lead ? 'Update' : 'Create'}
             </button>
           </div>

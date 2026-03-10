@@ -1,0 +1,38 @@
+Shop Software Starter Guide
+
+Product:
+CommerceOS Shop Software
+
+What this software is for:
+- Retail stores
+- Mini marts
+- General shops
+- Multi-branch retail operations
+
+Core modules:
+- Retail POS
+- Customer ledger and credit sales
+- Inventory and stock room
+- Invoices and receipts
+- Accounting suite
+- Sales and branch reports
+
+Staff roles:
+- Manager: branch stock, sales, discount control
+- Accountant: journals, receivables, payables, tax
+- Cashier: item billing, payment collection, daily closing
+
+Branch support:
+- Separate branch users and access rules
+- Branch-level stock and finance
+- Central owner reporting
+
+How to start:
+1. Create your account.
+2. Create your first shop branch.
+3. Add products, tax, pricing, and stock.
+4. Assign manager, accountant, and cashier roles.
+5. Start billing and tracking inventory.
+
+Use the web version:
+Open the app and sign in from the CommerceOS login page.

@@ -27,4 +27,31 @@ export const posSaleApi = {
   create: (data) => api.post("/pos/sales", data).then((r) => r.data),
   refund: (id) => api.post(`/pos/sales/${id}/refund`).then((r) => r.data),
   stats: () => api.get("/pos/sales/stats").then((r) => r.data),
+  updateOrderStatus: (id, orderStatus) =>
+    api.patch(`/pos/sales/${id}/order-status`, { orderStatus }).then((r) => r.data),
+};
+
+// ─── Tables ───
+export const posTableApi = {
+  list: () => api.get("/pos/tables").then((r) => r.data),
+  create: (data) => api.post("/pos/tables", data).then((r) => r.data),
+  update: (id, data) => api.patch(`/pos/tables/${id}`, data).then((r) => r.data),
+  updateStatus: (id, status) => api.patch(`/pos/tables/${id}/status`, { status }).then((r) => r.data),
+  reserve: (id, data) => api.patch(`/pos/tables/${id}/reservation`, data).then((r) => r.data),
+  cancelReservation: (id) => api.delete(`/pos/tables/${id}/reservation`).then((r) => r.data),
+  delete: (id) => api.delete(`/pos/tables/${id}`).then((r) => r.data),
+};
+
+// ─── Shifts ───
+export const posShiftApi = {
+  current: () => api.get("/pos/shifts/current").then((r) => r.data),
+  list: () => api.get("/pos/shifts").then((r) => r.data),
+  get: (id) => api.get(`/pos/shifts/${id}`).then((r) => r.data),
+  open: (data) => api.post("/pos/shifts/open", data).then((r) => r.data),
+  close: (id, data) => api.post(`/pos/shifts/${id}/close`, data).then((r) => r.data),
+};
+
+// ─── KDS ───
+export const posKdsApi = {
+  list: () => api.get("/pos/kds").then((r) => r.data),
 };

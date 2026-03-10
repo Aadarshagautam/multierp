@@ -1,4 +1,8 @@
 import mongoose from "mongoose";
+import {
+  DEFAULT_COUNTRY,
+  INVOICE_PAYMENT_METHODS,
+} from "../../core/utils/nepal.js";
 
 const invoiceItemSchema = new mongoose.Schema(
   {
@@ -98,7 +102,7 @@ const invoiceSchema = new mongoose.Schema(
       city: { type: String, default: "" },
       state: { type: String, default: "" },
       pincode: { type: String, default: "" },
-      country: { type: String, default: "India" },
+      country: { type: String, default: DEFAULT_COUNTRY },
     },
     customerGstin: {
       type: String,
@@ -159,7 +163,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["cash", "card", "bank_transfer", "upi", "cheque", "other"],
+      enum: INVOICE_PAYMENT_METHODS,
       default: "cash",
     },
     notes: {

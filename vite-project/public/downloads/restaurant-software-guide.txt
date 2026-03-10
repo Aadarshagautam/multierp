@@ -1,0 +1,38 @@
+Restaurant Software Starter Guide
+
+Product:
+CommerceOS Restaurant Software
+
+What this software is for:
+- Dine-in restaurants
+- Food courts
+- Delivery kitchens
+- Multi-branch restaurant groups
+
+Core modules:
+- Table and floor plan
+- Kitchen display
+- POS billing
+- CRM and loyalty
+- Inventory and wastage control
+- Accounting and reports
+
+Staff roles:
+- Manager: branch sales, tables, kitchen, pricing, reports
+- Accountant: purchases, journals, tax, profit and loss
+- Cashier: billing, receipts, shift open and close
+
+Branch support:
+- Separate branch users
+- Separate branch reporting
+- Central owner dashboard
+
+How to start:
+1. Create your account.
+2. Create your first restaurant branch.
+3. Add tables, menu items, taxes, and pricing.
+4. Assign manager, accountant, and cashier roles.
+5. Start billing from the POS screen.
+
+Use the web version:
+Open the app and sign in from the CommerceOS login page.

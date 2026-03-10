@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
+import { formatCurrencyNpr, formatDateNepal } from '../utils/nepal.js'
 
 const STATUS_CONFIG = {
   draft: {
@@ -55,17 +56,11 @@ const STATUS_TABS = [
 ]
 
 const formatCurrency = (amount) => {
-  const num = parseFloat(amount) || 0
-  return `\u20B9${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return formatCurrencyNpr(amount)
 }
 
 const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
+  return formatDateNepal(dateStr)
 }
 
 const InvoicesPage = () => {

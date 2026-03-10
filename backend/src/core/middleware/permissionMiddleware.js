@@ -1,11 +1,22 @@
 import OrgMemberModel from "../models/OrgMember.js";
 import { ROLE_PERMISSIONS, hasPermission } from "../config/permissions.js";
 
+export const buildEffectivePermissions = (membership) => {
+  const rolePerms = ROLE_PERMISSIONS[membership?.role] || [];
+  const customPerms = Array.isArray(membership?.permissions) ? membership.permissions : [];
+
+  return [...new Set([...rolePerms, ...customPerms])];
+};
+
 const permissionMiddleware = (requiredPermission) => {
   return async (req, res, next) => {
     try {
-      // If no orgId, allow (backward compat for personal use)
-      if (!req.orgId) return next();
+      if (!req.orgId) {
+        return res.status(403).json({
+          success: false,
+          message: "Organization context is required",
+        });
+      }
 
       const membership = await OrgMemberModel.findOne({
         orgId: req.orgId,
@@ -20,9 +31,7 @@ const permissionMiddleware = (requiredPermission) => {
         });
       }
 
-      // Get effective permissions: role defaults + individual overrides
-      const rolePerms = ROLE_PERMISSIONS[membership.role] || [];
-      const allPerms = [...new Set([...rolePerms, ...membership.permissions])];
+      const allPerms = buildEffectivePermissions(membership);
 
       if (!hasPermission(allPerms, requiredPermission)) {
         return res.status(403).json({

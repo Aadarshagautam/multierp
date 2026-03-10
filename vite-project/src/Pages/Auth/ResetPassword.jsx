@@ -1,229 +1,222 @@
-import React, { useContext, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AppContext } from "../../context/AppContext";
-import { Mail, Lock, ArrowLeft, Shield } from 'lucide-react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, KeyRound, Mail, ShieldCheck } from "lucide-react";
+import toast from "react-hot-toast";
+import api from "../../lib/api.js";
+
+const initialForm = {
+  email: "",
+  otp: "",
+  newPassword: "",
+};
+
+const passwordHint = "Use 8+ characters with uppercase, lowercase, and a number.";
 
 const ResetPassword = () => {
-    const { backendUrl } = useContext(AppContext)
-    const navigate = useNavigate();
-    
-    const [email, setEmail] = useState('')
-    const [newPassword, setNewPassword] = useState('')
-    const [isEmailSent, setIsEmailSent] = useState(false)
-    const [otp, setOtp] = useState('')
-    const [isOtpSubmitted, setIsOtpSubmitted] = useState(false)
-    const [loading, setLoading] = useState(false)
+  const navigate = useNavigate();
+  const [step, setStep] = useState("request");
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState(initialForm);
 
-    const inputRef = React.useRef([])
+  const updateField = (key) => (event) => {
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
 
-    const handleInput = (e, index) => {
-        if (e.target.value.length > 0 && index < inputRef.current.length - 1) {
-            inputRef.current[index + 1].focus()
-        }
+  const requestCode = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data } = await api.post("/auth/send-reset-otp", {
+        email: form.email.trim(),
+      });
+
+      toast.success(data.message);
+      setStep("reset");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Unable to send verification code");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const handleKeyDown = (e, index) => {
-        if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
-            inputRef.current[index - 1].focus()
-        }
+  const resetPassword = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data } = await api.post("/auth/reset-password", {
+        email: form.email.trim(),
+        otp: form.otp.trim(),
+        newPassword: form.newPassword,
+      });
+
+      toast.success(data.message || "Password updated");
+      navigate("/login");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Unable to reset password");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const handlePaste = (e) => {
-        const paste = e.clipboardData.getData('text')
-        const pasteArray = paste.split('')
-        pasteArray.forEach((char, index) => {
-            if (inputRef.current[index]) {
-                inputRef.current[index].value = char
-            }
-        })
-    }
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(20,184,166,0.16),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.18),_transparent_34%),linear-gradient(180deg,_#f8fafc_0%,_#eef2f7_100%)] px-4 py-6 sm:px-6 lg:py-10">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl items-center">
+        <div className="grid w-full overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_28px_90px_-48px_rgba(15,23,42,0.55)] lg:grid-cols-[1fr,0.95fr]">
+          <section className="relative overflow-hidden bg-slate-950 px-6 py-8 text-white sm:px-8 lg:px-10 lg:py-12">
+            <div className="absolute inset-0">
+              <div className="absolute left-10 top-12 h-40 w-40 rounded-full bg-teal-400/20 blur-3xl" />
+              <div className="absolute bottom-8 right-10 h-48 w-48 rounded-full bg-amber-400/20 blur-3xl" />
+            </div>
 
-    const onSubmitEmail = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            axios.defaults.withCredentials = true;
-            const { data } = await axios.post(backendUrl + '/api/auth/send-reset-otp', { email })
-            if (data.success) {
-                toast.success(data.message)
-                setIsEmailSent(true)
-            } else {
-                toast.error(data.message)
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || error.message)
-        } finally {
-            setLoading(false);
-        }
-    }
+            <div className="relative flex h-full flex-col">
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-slate-200 transition hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to login
+              </button>
 
-    const onSubmitOtp = async (e) => {
-        e.preventDefault();
-        const otpArray = inputRef.current.map(input => input.value)
-        const otpValue = otpArray.join('')
-        setOtp(otpValue)
-        setIsOtpSubmitted(true)
-    }
+              <div className="mt-12">
+                <span className="inline-flex rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-slate-100">
+                  Account recovery
+                </span>
+                <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Recover access without losing your workspace
+                </h1>
+                <p className="mt-4 max-w-xl text-sm leading-7 text-slate-300 sm:text-base">
+                  Request a verification code, confirm it, and set a stronger password for your owner or staff account.
+                </p>
+              </div>
 
-    const onSubmitNewPassword = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            axios.defaults.withCredentials = true;
-            const { data } = await axios.post(backendUrl + '/api/auth/reset-password', { email, otp, newPassword })
-            if (data.success) {
-                toast.success(data.message)
-                navigate('/login')
-            } else {
-                toast.error(data.message)
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || error.message)
-        } finally {
-            setLoading(false);
-        }
-    }
+              <div className="mt-10 space-y-4">
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                  <Mail className="h-5 w-5 text-teal-300" />
+                  <p className="mt-3 text-sm font-semibold">Email-based recovery</p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    We send the code only to the registered email for that account.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                  <ShieldCheck className="h-5 w-5 text-amber-300" />
+                  <p className="mt-3 text-sm font-semibold">Stronger password rules</p>
+                  <p className="mt-2 text-sm text-slate-300">{passwordHint}</p>
+                </div>
+              </div>
+            </div>
+          </section>
 
-    return (
-        <div className="flex items-center justify-center min-h-screen px-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-            {/* Back button */}
-            <button
-                onClick={() => navigate('/login')}
-                className="absolute top-8 left-8 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-            >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">Back to Login</span>
-            </button>
+          <section className="px-6 py-8 sm:px-8 lg:px-10 lg:py-12">
+            <div className="max-w-md">
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">
+                {step === "request" ? "Step 1" : "Step 2"}
+              </p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                {step === "request" ? "Send verification code" : "Create a new password"}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                {step === "request"
+                  ? "Enter the email address linked to your business software account."
+                  : "Enter the 6-digit code from your email and choose a stronger password."}
+              </p>
+            </div>
 
-            {/* Step 1: Enter Email */}
-            {!isEmailSent && (
-                <form onSubmit={onSubmitEmail} className='bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100'>
-                    <div className="flex justify-center mb-6">
-                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-full">
-                            <Mail className="w-8 h-8 text-white" />
-                        </div>
-                    </div>
-                    
-                    <h1 className='text-gray-900 text-3xl font-bold text-center mb-3'>Reset Password</h1>
-                    <p className='text-center mb-8 text-gray-600'>
-                        Enter your registered email address and we'll send you a verification code
-                    </p>
+            {step === "request" ? (
+              <form onSubmit={requestCode} className="mt-10 max-w-md space-y-6">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Email address</label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={updateField("email")}
+                      className="w-full rounded-2xl border border-slate-300 px-12 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950"
+                      placeholder="owner@business.com"
+                      required
+                    />
+                  </div>
+                </div>
 
-                    <div className='mb-6'>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                                type="email"
-                                placeholder='Enter your email'
-                                className='w-full pl-11 pr-4 py-3 focus:ring-indigo-500 border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all'
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                    </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? "Sending code..." : "Send verification code"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={resetPassword} className="mt-10 max-w-md space-y-6">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Email address</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={updateField("email")}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950"
+                    required
+                  />
+                </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className='w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed'
-                    >
-                        {loading ? 'Sending...' : 'Send Verification Code'}
-                    </button>
-                </form>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Verification code</label>
+                  <div className="relative">
+                    <KeyRound className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      value={form.otp}
+                      onChange={updateField("otp")}
+                      className="w-full rounded-2xl border border-slate-300 px-12 py-3 text-sm tracking-[0.35em] text-slate-900 outline-none transition focus:border-slate-950"
+                      placeholder="123456"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">New password</label>
+                  <input
+                    type="password"
+                    value={form.newPassword}
+                    onChange={updateField("newPassword")}
+                    minLength={8}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950"
+                    placeholder="Use a stronger password"
+                    required
+                  />
+                  <p className="mt-2 text-xs text-slate-500">{passwordHint}</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStep("request")}
+                    className="inline-flex flex-1 items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Change email
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="inline-flex flex-1 items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loading ? "Updating..." : "Reset password"}
+                  </button>
+                </div>
+              </form>
             )}
-
-            {/* Step 2: Enter OTP */}
-            {!isOtpSubmitted && isEmailSent && (
-                <form onSubmit={onSubmitOtp} className='bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100'>
-                    <div className="flex justify-center mb-6">
-                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-full">
-                            <Shield className="w-8 h-8 text-white" />
-                        </div>
-                    </div>
-
-                    <h1 className='text-gray-900 text-3xl font-bold text-center mb-3'>Enter Verification Code</h1>
-                    <p className='text-center mb-8 text-gray-600'>
-                        We've sent a 6-digit code to <span className="font-semibold text-indigo-600">{email}</span>
-                    </p>
-
-                    <div className='flex justify-center gap-2 mb-8' onPaste={handlePaste}>
-                        {Array(6).fill(0).map((_, index) => (
-                            <input
-                                key={index}
-                                type="text"
-                                maxLength='1'
-                                required
-                                className='w-12 h-14 bg-gray-50 border-2 border-gray-300 text-gray-900 text-center text-xl font-semibold rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all'
-                                ref={el => inputRef.current[index] = el}
-                                onInput={(e) => handleInput(e, index)}
-                                onKeyDown={(e) => handleKeyDown(e, index)}
-                            />
-                        ))}
-                    </div>
-
-                    <button
-                        type="submit"
-                        className='w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300'
-                    >
-                        Verify Code
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setIsEmailSent(false)}
-                        className="w-full mt-4 text-indigo-600 hover:text-indigo-700 font-medium"
-                    >
-                        Change email address
-                    </button>
-                </form>
-            )}
-
-            {/* Step 3: Enter New Password */}
-            {isOtpSubmitted && isEmailSent && (
-                <form onSubmit={onSubmitNewPassword} className='bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100'>
-                    <div className="flex justify-center mb-6">
-                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-full">
-                            <Lock className="w-8 h-8 text-white" />
-                        </div>
-                    </div>
-
-                    <h1 className='text-gray-900 text-3xl font-bold text-center mb-3'>Create New Password</h1>
-                    <p className='text-center mb-8 text-gray-600'>
-                        Choose a strong password to secure your account
-                    </p>
-
-                    <div className='mb-6'>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                                type="password"
-                                placeholder='Enter new password'
-                                className='w-full pl-11 pr-4 py-3 text-gray-900  bg-gray-50 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all'
-                                value={newPassword}
-                                onChange={e => setNewPassword(e.target.value)}
-                                required
-                                minLength={6}
-                            />
-                        </div>
-                        <p className="mt-2 text-xs text-gray-500">Must be at least 6 characters long</p>
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className='w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed'
-                    >
-                        {loading ? 'Resetting...' : 'Reset Password'}
-                    </button>
-                </form>
-            )}
+          </section>
         </div>
-    )
-}
+      </div>
+    </div>
+  );
+};
 
-export default ResetPassword
+export default ResetPassword;

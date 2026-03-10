@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { DEFAULT_COUNTRY, DEFAULT_CURRENCY } from "../utils/nepal.js";
 
 const organizationSchema = new mongoose.Schema(
   {
@@ -27,7 +28,7 @@ const organizationSchema = new mongoose.Schema(
       city: { type: String, default: "" },
       state: { type: String, default: "" },
       pincode: { type: String, default: "" },
-      country: { type: String, default: "India" },
+      country: { type: String, default: DEFAULT_COUNTRY },
     },
     phone: {
       type: String,
@@ -45,9 +46,19 @@ const organizationSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    businessType: {
+      type: String,
+      enum: ["restaurant", "cafe", "shop", "general"],
+      default: "general",
+    },
+    softwarePlan: {
+      type: String,
+      enum: ["single-branch", "growth", "multi-branch"],
+      default: "single-branch",
+    },
     currency: {
       type: String,
-      default: "INR",
+      default: DEFAULT_CURRENCY,
     },
     financialYearStart: {
       type: Number,

@@ -1,7 +1,5 @@
 import PosCustomer from "../models/Customer.js";
-
-const ownerFilter = (req) =>
-  req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+import { buildPosScopeFilter, getPosBranchId } from "../utils/scope.js";
 
 export const customerService = {
   async create(data, req) {
@@ -9,12 +7,13 @@ export const customerService = {
       ...data,
       userId: req.userId,
       orgId: req.orgId || null,
+      branchId: getPosBranchId(req),
     });
     return customer.save();
   },
 
   async list(req) {
-    const filter = { ...ownerFilter(req) };
+    const filter = { ...buildPosScopeFilter(req) };
     const { search } = req.query;
 
     if (search) {
@@ -28,24 +27,24 @@ export const customerService = {
   },
 
   async getById(id, req) {
-    return PosCustomer.findOne({ _id: id, ...ownerFilter(req) });
+    return PosCustomer.findOne({ _id: id, ...buildPosScopeFilter(req) });
   },
 
   async update(id, data, req) {
     return PosCustomer.findOneAndUpdate(
-      { _id: id, ...ownerFilter(req) },
+      { _id: id, ...buildPosScopeFilter(req) },
       { $set: data },
       { new: true, runValidators: true }
     );
   },
 
   async delete(id, req) {
-    return PosCustomer.findOneAndDelete({ _id: id, ...ownerFilter(req) });
+    return PosCustomer.findOneAndDelete({ _id: id, ...buildPosScopeFilter(req) });
   },
 
   async adjustCredit(id, amount, req) {
     return PosCustomer.findOneAndUpdate(
-      { _id: id, ...ownerFilter(req) },
+      { _id: id, ...buildPosScopeFilter(req) },
       { $inc: { creditBalance: amount } },
       { new: true }
     );

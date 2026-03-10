@@ -1,63 +1,114 @@
-import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import React, { Suspense, lazy } from 'react'
+import { Navigate, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-
-// Layout
+import { LoaderCircle } from 'lucide-react'
 import DashboardLayout from './components/DashboardLayout.jsx'
+import PackageRoute from './components/PackageRoute.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import StatePanel from './components/StatePanel.jsx'
 
-// Auth (no layout)
-import Login from './Pages/Auth/Login.jsx'
-import EmailVerifty from './Pages/Auth/EmailVerifty.jsx'
-import ResetPassword from './Pages/Auth/ResetPassword.jsx'
+const Login = lazy(() => import('./Pages/Auth/Login.jsx'))
+const EmailVerifty = lazy(() => import('./Pages/Auth/EmailVerifty.jsx'))
+const ResetPassword = lazy(() => import('./Pages/Auth/ResetPassword.jsx'))
+const CreatePages = lazy(() => import('./Pages/CreatePages.jsx'))
+const NoteDetailPage = lazy(() => import('./Pages/NoteDetailPage.jsx'))
+const Dashboard = lazy(() => import('./Pages/Dashboard.jsx'))
+const HomePages = lazy(() => import('./Pages/HomePages.jsx'))
+const TodoPage = lazy(() => import('./Pages/TodoPage.jsx'))
+const AccountingPage = lazy(() => import('./Pages/AccountingPage.jsx'))
+const InventoryPage = lazy(() => import('./Pages/InventoryPage.jsx'))
+const ReportsPage = lazy(() => import('./Pages/ReportsPage.jsx'))
+const PurchasePage = lazy(() => import('./Pages/PurchasePage.jsx'))
+const CustomersPage = lazy(() => import('./Pages/CustomersPage.jsx'))
+const InvoicesPage = lazy(() => import('./Pages/InvoicesPage.jsx'))
+const InvoiceFormPage = lazy(() => import('./Pages/InvoiceFormPage.jsx'))
+const InvoiceDetailPage = lazy(() => import('./Pages/InvoiceDetailPage.jsx'))
+const CRMPage = lazy(() => import('./Pages/CRMPage.jsx'))
+const AppSwitcher = lazy(() => import('./components/AppSwitcher.jsx'))
+const SettingsPage = lazy(() => import('./Pages/SettingsPage.jsx'))
+const SuiteHomePage = lazy(() => import('./Pages/SuiteHomePage.jsx'))
+const LandingPage = lazy(() => import('./Pages/LandingPage.jsx'))
+const SoftwareProductPage = lazy(() => import('./Pages/SoftwareProductPage.jsx'))
+const POSDashboard = lazy(() => import('./features/pos/POSDashboard.jsx'))
+const ProductManagement = lazy(() => import('./features/pos/ProductManagement.jsx'))
+const CustomerManagement = lazy(() => import('./features/pos/CustomerManagement.jsx'))
+const BillingScreen = lazy(() => import('./features/pos/BillingScreen.jsx'))
+const SalesHistory = lazy(() => import('./features/pos/SalesHistory.jsx'))
+const PosInvoiceDetail = lazy(() => import('./features/pos/InvoiceDetail.jsx'))
+const TableManagement = lazy(() => import('./features/pos/TableManagement.jsx'))
+const KitchenDisplay = lazy(() => import('./features/pos/KitchenDisplay.jsx'))
+const ShiftManagement = lazy(() => import('./features/pos/ShiftManagement.jsx'))
 
-// Full-screen editors (no sidebar)
-import CreatePages from './Pages/CreatePages.jsx'
-import NoteDetailPage from './Pages/NoteDetailPage.jsx'
+const RouteLoader = () => (
+  <div className="page-shell">
+    <StatePanel
+      icon={LoaderCircle}
+      tone="teal"
+      title="Loading workspace"
+      message="Preparing the next screen, syncing your workspace, and keeping the navigation responsive."
+      className="animate-fade-in"
+    />
+  </div>
+)
 
-// Pages rendered inside DashboardLayout
-import Dashboard from './Pages/Dashboard.jsx'
-import HomePages from './Pages/HomePages.jsx'
-import TodoPage from './Pages/TodoPage.jsx'
-import AccountingPage from './Pages/AccountingPage.jsx'
-import InventoryPage from './Pages/InventoryPage.jsx'
-import ReportsPage from './Pages/ReportsPage.jsx'
-import PurchasePage from './Pages/PurchasePage.jsx'
-import CustomersPage from './Pages/CustomersPage.jsx'
-import InvoicesPage from './Pages/InvoicesPage.jsx'
-import InvoiceFormPage from './Pages/InvoiceFormPage.jsx'
-import InvoiceDetailPage from './Pages/InvoiceDetailPage.jsx'
-import CRMPage from './Pages/CRMPage.jsx'
-import LeadListPage from './Pages/crm/LeadListPage.jsx'
-import LeadFormPage from './Pages/crm/LeadFormPage.jsx'
-import LeadsKanbanPage from './Pages/crm/LeadsKanbanPage.jsx'
-import AppSwitcher from './components/AppSwitcher.jsx'
-import SettingsPage from './Pages/SettingsPage.jsx'
-
-// POS Module
-import POSDashboard from './features/pos/POSDashboard.jsx'
-import ProductManagement from './features/pos/ProductManagement.jsx'
-import CustomerManagement from './features/pos/CustomerManagement.jsx'
-import BillingScreen from './features/pos/BillingScreen.jsx'
-import SalesHistory from './features/pos/SalesHistory.jsx'
-import PosInvoiceDetail from './features/pos/InvoiceDetail.jsx'
+const LazyScreen = ({ children }) => (
+  <Suspense fallback={<RouteLoader />}>{children}</Suspense>
+)
 
 const App = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-stone-50">
       <Toaster position="top-right" />
       <Routes>
-        {/* -- Auth pages (no layout) -- */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/email-verifty" element={<EmailVerifty />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/"
+          element={
+            <LazyScreen>
+              <LandingPage />
+            </LazyScreen>
+          }
+        />
+        <Route
+          path="/software/:slug"
+          element={
+            <LazyScreen>
+              <SoftwareProductPage />
+            </LazyScreen>
+          }
+        />
 
-        {/* -- Full-screen editors (no sidebar) -- */}
+        <Route
+          path="/login"
+          element={
+            <LazyScreen>
+              <Login />
+            </LazyScreen>
+          }
+        />
+        <Route
+          path="/email-verifty"
+          element={
+            <LazyScreen>
+              <EmailVerifty />
+            </LazyScreen>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <LazyScreen>
+              <ResetPassword />
+            </LazyScreen>
+          }
+        />
+
         <Route
           path="/create"
           element={
             <ProtectedRoute>
-              <CreatePages />
+              <LazyScreen>
+                <CreatePages />
+              </LazyScreen>
             </ProtectedRoute>
           }
         />
@@ -65,44 +116,51 @@ const App = () => {
           path="/notes/:id"
           element={
             <ProtectedRoute>
-              <NoteDetailPage />
+              <LazyScreen>
+                <NoteDetailPage />
+              </LazyScreen>
             </ProtectedRoute>
           }
         />
 
-        {/* -- All other pages: DashboardLayout provides Odoo sidebar + topbar -- */}
         <Route
           element={
             <ProtectedRoute>
-              <DashboardLayout />
+              <PackageRoute>
+                <DashboardLayout />
+              </PackageRoute>
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<HomePages />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/todos" element={<TodoPage />} />
-          <Route path="/accounting" element={<AccountingPage />} />
-          <Route path="/inventory" element={<InventoryPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/purchases" element={<PurchasePage />} />
-          <Route path="/customers" element={<CustomersPage />} />
-          <Route path="/invoices" element={<InvoicesPage />} />
-          <Route path="/invoices/new" element={<InvoiceFormPage />} />
-          <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-          <Route path="/invoices/:id/edit" element={<InvoiceFormPage />} />
-          <Route path="/crm" element={<CRMPage />} />
-          <Route path="/crm/leads" element={<LeadListPage />} />
-          <Route path="/crm/leads/new" element={<LeadFormPage />} />
-          <Route path="/crm/leads/:id/edit" element={<LeadFormPage />} />
-          <Route path="/crm/pipeline" element={<LeadsKanbanPage />} />
-          <Route path="/pos" element={<POSDashboard />} />
-          <Route path="/pos/products" element={<ProductManagement />} />
-          <Route path="/pos/customers" element={<CustomerManagement />} />
-          <Route path="/pos/billing" element={<BillingScreen />} />
-          <Route path="/pos/sales" element={<SalesHistory />} />
-          <Route path="/pos/sales/:id" element={<PosInvoiceDetail />} />
-          <Route path="/apps" element={<AppSwitcher />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/home" element={<LazyScreen><SuiteHomePage /></LazyScreen>} />
+          <Route path="/dashboard" element={<LazyScreen><Dashboard /></LazyScreen>} />
+          <Route path="/notes" element={<LazyScreen><HomePages /></LazyScreen>} />
+          <Route path="/todos" element={<LazyScreen><TodoPage /></LazyScreen>} />
+          <Route path="/accounting" element={<LazyScreen><AccountingPage /></LazyScreen>} />
+          <Route path="/inventory" element={<LazyScreen><InventoryPage /></LazyScreen>} />
+          <Route path="/reports" element={<LazyScreen><ReportsPage /></LazyScreen>} />
+          <Route path="/purchases" element={<LazyScreen><PurchasePage /></LazyScreen>} />
+          <Route path="/customers" element={<LazyScreen><CustomersPage /></LazyScreen>} />
+          <Route path="/invoices" element={<LazyScreen><InvoicesPage /></LazyScreen>} />
+          <Route path="/invoices/new" element={<LazyScreen><InvoiceFormPage /></LazyScreen>} />
+          <Route path="/invoices/:id" element={<LazyScreen><InvoiceDetailPage /></LazyScreen>} />
+          <Route path="/invoices/:id/edit" element={<LazyScreen><InvoiceFormPage /></LazyScreen>} />
+          <Route path="/crm" element={<LazyScreen><CRMPage /></LazyScreen>} />
+          <Route path="/crm/leads" element={<Navigate to="/crm" replace />} />
+          <Route path="/crm/leads/new" element={<Navigate to="/crm" replace />} />
+          <Route path="/crm/leads/:id/edit" element={<Navigate to="/crm" replace />} />
+          <Route path="/crm/pipeline" element={<Navigate to="/crm" replace />} />
+          <Route path="/pos" element={<LazyScreen><POSDashboard /></LazyScreen>} />
+          <Route path="/pos/products" element={<LazyScreen><ProductManagement /></LazyScreen>} />
+          <Route path="/pos/customers" element={<LazyScreen><CustomerManagement /></LazyScreen>} />
+          <Route path="/pos/billing" element={<LazyScreen><BillingScreen /></LazyScreen>} />
+          <Route path="/pos/sales" element={<LazyScreen><SalesHistory /></LazyScreen>} />
+          <Route path="/pos/sales/:id" element={<LazyScreen><PosInvoiceDetail /></LazyScreen>} />
+          <Route path="/pos/tables" element={<LazyScreen><TableManagement /></LazyScreen>} />
+          <Route path="/pos/kds" element={<LazyScreen><KitchenDisplay /></LazyScreen>} />
+          <Route path="/pos/shifts" element={<LazyScreen><ShiftManagement /></LazyScreen>} />
+          <Route path="/apps" element={<LazyScreen><AppSwitcher /></LazyScreen>} />
+          <Route path="/settings" element={<LazyScreen><SettingsPage /></LazyScreen>} />
         </Route>
       </Routes>
     </div>

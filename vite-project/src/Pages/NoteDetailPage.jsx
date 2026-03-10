@@ -37,7 +37,7 @@ const NoteDetailPage = () => {
   }, [id, navigate]);
 
   // Auto-save function
-  const autoSave = async (updatedNote) => {
+  const autoSave = React.useCallback(async (updatedNote) => {
     if (!updatedNote.title.trim() || !updatedNote.content.trim()) {
       return;
     }
@@ -53,7 +53,7 @@ const NoteDetailPage = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [id]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -74,7 +74,7 @@ const NoteDetailPage = () => {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [note, hasUnsavedChanges, loading]);
+  }, [autoSave, note, hasUnsavedChanges, loading]);
 
   // Handle title change
   const handleTitleChange = (e) => {

@@ -1,300 +1,595 @@
-import React, { useState, useEffect, useContext } from 'react'
-import axios from 'axios'
-import { AppContext } from '../context/AppContext'
+import React, { useContext, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Building2, Users, ScrollText, Save, Shield } from 'lucide-react'
+import { Building2, ChefHat, GitBranch, Package, Plus, Shield, ShoppingCart } from 'lucide-react'
+import AppContext from '../context/app-context.js'
+import { getBusinessMeta } from '../config/businessConfigs.js'
+import api from '../lib/api.js'
+import { DEFAULT_PHONE_PLACEHOLDER } from '../utils/nepal.js'
 
-const TABS = [
-  { key: 'company', label: 'Company', icon: Building2 },
-  { key: 'team', label: 'Team', icon: Users },
-  { key: 'audit', label: 'Audit Log', icon: ScrollText },
-]
-
-const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState('company')
-
-  return (
-    <div className="lg:ml-64 mt-16 min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage your organization</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 px-6">
-        <div className="flex gap-1">
-          {TABS.map(tab => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="p-6 max-w-4xl">
-        {activeTab === 'company' && <CompanyTab />}
-        {activeTab === 'team' && <TeamTab />}
-        {activeTab === 'audit' && <AuditTab />}
-      </div>
-    </div>
-  )
+const SOFTWARE_STYLES = {
+  restaurant: {
+    icon: ChefHat,
+    base: 'border-amber-300 bg-amber-50 text-amber-800',
+    active: 'border-amber-500 bg-amber-100 ring-2 ring-amber-400',
+    dot: 'bg-amber-500',
+  },
+  cafe: {
+    icon: ShoppingCart,
+    base: 'border-teal-300 bg-teal-50 text-teal-800',
+    active: 'border-teal-500 bg-teal-100 ring-2 ring-teal-400',
+    dot: 'bg-teal-500',
+  },
+  shop: {
+    icon: Package,
+    base: 'border-blue-300 bg-blue-50 text-blue-800',
+    active: 'border-blue-500 bg-blue-100 ring-2 ring-blue-400',
+    dot: 'bg-blue-500',
+  },
+  general: {
+    icon: Building2,
+    base: 'border-stone-300 bg-stone-50 text-stone-700',
+    active: 'border-stone-400 bg-stone-100 ring-2 ring-stone-300',
+    dot: 'bg-stone-500',
+  },
 }
 
-// ── Company Tab ──
-const CompanyTab = () => {
-  const { backendUrl } = useContext(AppContext)
-  const [form, setForm] = useState({ name: '', phone: '', email: '', gstin: '', currency: 'INR', invoicePrefix: 'INV', financialYearStart: 'April' })
+const buildSoftwareOptions = (includeGeneral = false) =>
+  ['restaurant', 'cafe', 'shop', ...(includeGeneral ? ['general'] : [])].map(value => ({
+    value,
+    label: getBusinessMeta(value).label,
+    description: getBusinessMeta(value).settingsDescription,
+    ...SOFTWARE_STYLES[value],
+  }))
+
+const ROLE_LABELS = {
+  owner: 'Owner',
+  admin: 'Admin',
+  manager: 'Manager',
+  accountant: 'Accountant',
+  cashier: 'Cashier',
+  member: 'Member',
+  viewer: 'Viewer',
+}
+
+const ASSIGNABLE_ROLES = ['admin', 'manager', 'accountant', 'cashier', 'member', 'viewer']
+
+const SettingsPage = () => {
+  const { currentOrgId, orgBusinessType, setOrgBusinessType, setCurrentOrgName, hasPermission } = useContext(AppContext)
+  const [loading, setLoading] = useState(true)
+  const [noOrg, setNoOrg] = useState(false)
+  const [members, setMembers] = useState([])
+  const [branches, setBranches] = useState([])
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [selectedType, setSelectedType] = useState(orgBusinessType || 'general')
+  const [softwarePlan, setSoftwarePlan] = useState('single-branch')
   const [saving, setSaving] = useState(false)
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [newMember, setNewMember] = useState({ username: '', email: '', password: '', role: 'cashier', branchId: '' })
+  const [addingMember, setAddingMember] = useState(false)
+  const [newBranch, setNewBranch] = useState({ name: '', code: '', email: '', phone: '' })
+  const [addingBranch, setAddingBranch] = useState(false)
+  const softwareOptions = buildSoftwareOptions(selectedType === 'general' || orgBusinessType === 'general')
+
+  const selectedSoftware = softwareOptions.find(option => option.value === selectedType) || softwareOptions[0]
 
   useEffect(() => {
-    axios.get(`${backendUrl}/api/org`).then(({ data }) => {
-      if (data.success && data.org) {
-        setForm({
-          name: data.org.name || '',
-          phone: data.org.phone || '',
-          email: data.org.email || '',
-          gstin: data.org.gstin || '',
-          currency: data.org.currency || 'INR',
-          invoicePrefix: data.org.invoicePrefix || 'INV',
-          financialYearStart: data.org.financialYearStart || 'April',
-        })
+    if (!currentOrgId) {
+      setNoOrg(true)
+      setLoading(false)
+      return
+    }
+
+    const load = async () => {
+      try {
+        const [orgRes, membersRes, branchesRes] = await Promise.all([
+          api.get('/org/'),
+          hasPermission('users.read') ? api.get('/org/members') : Promise.resolve(null),
+          hasPermission('settings.read') ? api.get('/org/branches') : Promise.resolve(null),
+        ])
+
+        if (orgRes.data?.success) {
+          const organization = orgRes.data.data
+          setName(organization.name || '')
+          setPhone(organization.phone || '')
+          setEmail(organization.email || '')
+          setSelectedType(organization.businessType || 'general')
+          setSoftwarePlan(organization.softwarePlan || 'single-branch')
+        } else if (orgRes.data?.message === 'No organization selected') {
+          setNoOrg(true)
+        }
+
+        if (membersRes?.data?.success) setMembers(membersRes.data.data || [])
+        if (branchesRes?.data?.success) setBranches(branchesRes.data.data || [])
+      } catch (error) {
+        if (error.response?.status === 400) {
+          setNoOrg(true)
+        } else {
+          toast.error('Failed to load settings')
+        }
+      } finally {
+        setLoading(false)
       }
-    }).catch(() => {})
-  }, [])
+    }
+
+    load()
+  }, [currentOrgId, hasPermission])
 
   const handleSave = async () => {
+    if (!name.trim()) return toast.error('Company name is required')
+
     setSaving(true)
     try {
-      const { data } = await axios.put(`${backendUrl}/api/org`, form)
-      if (data.success) toast.success('Settings saved')
-      else toast.error(data.message)
-    } catch (err) {
-      toast.error('Failed to save')
+      const { data } = await api.put('/org/', {
+        name: name.trim(),
+        phone,
+        email,
+        businessType: selectedType,
+      })
+
+      if (data.success) {
+        setOrgBusinessType(selectedType)
+        setCurrentOrgName(name.trim())
+        toast.success('Settings saved')
+      } else {
+        toast.error(data.message || 'Save failed')
+      }
+    } catch {
+      toast.error('Failed to save settings')
     } finally {
       setSaving(false)
     }
   }
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-lg font-bold text-gray-900 mb-4">Company Information</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-          <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-          <input type="text" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-          <input type="text" value={form.gstin} onChange={e => setForm({ ...form, gstin: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-          <select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
-            <option value="INR">INR (₹)</option>
-            <option value="USD">USD ($)</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Prefix</label>
-          <input type="text" value={form.invoicePrefix} onChange={e => setForm({ ...form, invoicePrefix: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Financial Year Start</label>
-          <select value={form.financialYearStart} onChange={e => setForm({ ...form, financialYearStart: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
-            {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-      </div>
+  const handleAddMember = async () => {
+    if (!newMember.username || !newMember.email || !newMember.role) {
+      return toast.error('Username, email, and role are required')
+    }
 
-      <button onClick={handleSave} disabled={saving} className="mt-6 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-        <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Changes'}
-      </button>
-    </div>
-  )
-}
-
-// ── Team Tab ──
-const TeamTab = () => {
-  const { backendUrl, userRole } = useContext(AppContext)
-  const [members, setMembers] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    axios.get(`${backendUrl}/api/org/members`).then(({ data }) => {
-      if (data.success) setMembers(data.members)
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
-
-  const handleRoleChange = async (memberId, newRole) => {
+    setAddingMember(true)
     try {
-      const { data } = await axios.patch(`${backendUrl}/api/org/members/${memberId}/role`, { role: newRole })
+      const payload = { ...newMember }
+      if (!payload.branchId) delete payload.branchId
+      if (!payload.password) delete payload.password
+
+      const { data } = await api.post('/org/members', payload)
       if (data.success) {
-        setMembers(prev => prev.map(m => m._id === memberId ? { ...m, role: newRole } : m))
-        toast.success('Role updated')
+        setMembers(prev => [...prev, data.data])
+        setNewMember({ username: '', email: '', password: '', role: 'cashier', branchId: '' })
+        setShowAddMember(false)
+        toast.success('Team member added')
       } else {
-        toast.error(data.message)
+        toast.error(data.message || 'Failed to add member')
       }
-    } catch (err) {
-      toast.error('Failed to update role')
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to add member')
+    } finally {
+      setAddingMember(false)
     }
   }
 
-  const ROLE_BADGES = {
-    owner: 'bg-yellow-100 text-yellow-700',
-    admin: 'bg-red-100 text-red-700',
-    manager: 'bg-purple-100 text-purple-700',
-    member: 'bg-blue-100 text-blue-700',
-    viewer: 'bg-gray-100 text-gray-600',
+  const handleCreateBranch = async () => {
+    if (!newBranch.name.trim()) return toast.error('Branch name is required')
+
+    setAddingBranch(true)
+    try {
+      const { data } = await api.post('/org/branches', {
+        name: newBranch.name.trim(),
+        code: newBranch.code.trim(),
+        email: newBranch.email.trim(),
+        phone: newBranch.phone.trim(),
+      })
+
+      if (data.success) {
+        setBranches(prev => [...prev, data.data])
+        setNewBranch({ name: '', code: '', email: '', phone: '' })
+        toast.success('Branch created')
+      } else {
+        toast.error(data.message || 'Failed to create branch')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to create branch')
+    } finally {
+      setAddingBranch(false)
+    }
+  }
+
+  const handleMemberUpdate = async (memberId, nextRole, nextBranchId) => {
+    const current = members.find(member => member._id === memberId)
+    if (!current) return
+
+    const payload = {
+      role: nextRole || current.role,
+      branchId: typeof nextBranchId === 'string' ? nextBranchId || null : current.branchId || null,
+    }
+
+    try {
+      const { data } = await api.patch(`/org/members/${memberId}/role`, payload)
+      if (data.success) {
+        setMembers(prev =>
+          prev.map(member => {
+            if (member._id !== memberId) return member
+
+            return {
+              ...member,
+              role: payload.role,
+              branchId: payload.branchId,
+              branchName: payload.branchId ? branches.find(branch => branch._id === payload.branchId)?.name || '' : '',
+            }
+          })
+        )
+        toast.success('Member updated')
+      } else {
+        toast.error(data.message || 'Failed to update member')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update member')
+    }
   }
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-indigo-300 rounded-full border-t-transparent animate-spin" /></div>
+    return (
+      <div className="page-shell">
+        <div className="panel p-8 text-center text-sm text-slate-500">Loading settings...</div>
+      </div>
+    )
   }
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="p-5 border-b border-gray-200">
-        <h2 className="text-lg font-bold text-gray-900">Team Members</h2>
-        <p className="text-sm text-gray-500 mt-1">{members.length} member(s) in this organization</p>
-      </div>
-      <div className="divide-y divide-gray-100">
-        {members.map(member => (
-          <div key={member._id} className="flex items-center justify-between p-4 hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-semibold text-sm">
-                {member.username?.[0]?.toUpperCase() || '?'}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{member.username}</p>
-                <p className="text-xs text-gray-500">{member.email}</p>
-              </div>
+  if (noOrg) {
+    return (
+      <div className="page-shell">
+        <div className="panel p-8 sm:p-12">
+          <div className="mx-auto max-w-md text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
+              <Building2 className="h-6 w-6 text-amber-600" />
             </div>
-            <div className="flex items-center gap-3">
-              {(userRole === 'owner' || userRole === 'admin') && member.role !== 'owner' ? (
-                <select
-                  value={member.role}
-                  onChange={e => handleRoleChange(member._id, e.target.value)}
-                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                  <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
-                </select>
-              ) : (
-                <span className={`text-xs px-3 py-1 rounded-full font-medium ${ROLE_BADGES[member.role]}`}>
-                  <Shield className="w-3 h-3 inline mr-1" />{member.role}
-                </span>
-              )}
-            </div>
+            <h2 className="text-lg font-semibold text-slate-900">No organization linked</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Your account is not linked to an organization. This usually happens with legacy accounts. Please log out
+              and register again, or contact support.
+            </p>
+            <p className="mt-3 text-xs text-slate-400">Error: No organization selected (400)</p>
           </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Audit Tab ──
-const AuditTab = () => {
-  const { backendUrl } = useContext(AppContext)
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-  const [pagination, setPagination] = useState(null)
-
-  const fetchLogs = async (p = 1) => {
-    setLoading(true)
-    try {
-      const { data } = await axios.get(`${backendUrl}/api/audit?page=${p}&limit=30`)
-      if (data.success) {
-        setLogs(data.logs)
-        setPagination(data.pagination)
-        setPage(p)
-      }
-    } catch (err) {
-      toast.error('Failed to load audit logs')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchLogs() }, [])
-
-  const ACTION_COLORS = {
-    create: 'bg-green-100 text-green-700',
-    update: 'bg-blue-100 text-blue-700',
-    delete: 'bg-red-100 text-red-700',
-    login: 'bg-indigo-100 text-indigo-700',
-    stage_change: 'bg-purple-100 text-purple-700',
-    convert: 'bg-yellow-100 text-yellow-700',
-    status_change: 'bg-orange-100 text-orange-700',
-  }
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200">
-      <div className="p-5 border-b border-gray-200">
-        <h2 className="text-lg font-bold text-gray-900">Audit Log</h2>
-        <p className="text-sm text-gray-500 mt-1">Track all actions in your organization</p>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-indigo-300 rounded-full border-t-transparent animate-spin" /></div>
-      ) : logs.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <ScrollText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No audit logs yet</p>
         </div>
-      ) : (
-        <>
-          <div className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
-            {logs.map(log => (
-              <div key={log._id} className="flex items-start gap-3 p-4 hover:bg-gray-50">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium mt-0.5 whitespace-nowrap ${ACTION_COLORS[log.action] || 'bg-gray-100 text-gray-600'}`}>
-                  {log.action}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800">{log.description || `${log.action} on ${log.module}`}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {log.userName || 'System'} &middot; {log.module} &middot; {new Date(log.createdAt).toLocaleString('en-IN')}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+      </div>
+    )
+  }
 
-          {/* Pagination */}
-          {pagination && pagination.pages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500">Page {pagination.page} of {pagination.pages} ({pagination.total} entries)</p>
-              <div className="flex gap-2">
-                <button disabled={page <= 1} onClick={() => fetchLogs(page - 1)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">Previous</button>
-                <button disabled={page >= pagination.pages} onClick={() => fetchLogs(page + 1)} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">Next</button>
+  return (
+    <div className="page-shell">
+      <section className="panel p-6 sm:p-8">
+        <p className="section-kicker">Business Package</p>
+        <h2 className="mt-2 section-heading">Choose the package that matches your Nepal business.</h2>
+        <p className="mt-2 text-sm text-slate-500">
+          This controls which focused work areas and daily workflow appear across your workspace.
+        </p>
+        <div className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
+          Active plan: {softwarePlan === 'multi-branch' ? 'Multi-Branch' : softwarePlan === 'growth' ? 'Growth' : 'Single Branch'}
+        </div>
+        {softwareOptions.some(option => option.value === 'general') && (
+          <p className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-700">
+            Legacy Workspace is shown only because this organization already uses it. New Nepal-first workspaces should stay on Restaurant, Cafe, or Shop.
+          </p>
+        )}
+        <div className={`mt-6 grid gap-4 sm:grid-cols-2 ${softwareOptions.length > 3 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+          {softwareOptions.map(option => {
+            const Icon = option.icon
+            const isActive = selectedType === option.value
+
+            return (
+              <button
+                key={option.value}
+                onClick={() => setSelectedType(option.value)}
+                className={`rounded-3xl border p-5 text-left transition ${isActive ? option.active : `${option.base} hover:shadow-sm`}`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <span className="text-sm font-semibold">{option.label}</span>
+                  {isActive && <div className={`ml-auto h-2.5 w-2.5 rounded-full ${option.dot}`} />}
+                </div>
+                <p className="mt-3 text-xs leading-5 opacity-80">{option.description}</p>
+              </button>
+            )
+          })}
+        </div>
+        {selectedType !== orgBusinessType && (
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Save to apply <strong>{selectedSoftware.label}</strong> across your workspace.
+          </p>
+        )}
+        {selectedType === 'general' && (
+          <p className="mt-4 rounded-2xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-700">
+            Legacy Workspace keeps broader access and more clutter. Use it only if this older workspace cannot move to Restaurant, Cafe, or Shop yet.
+          </p>
+        )}
+      </section>
+
+      <section className="panel p-6 sm:p-8">
+        <p className="section-kicker">Company Info</p>
+        <h2 className="mt-2 section-heading">Update your organization details.</h2>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Company name</label>
+            <input
+              value={name}
+              onChange={event => setName(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              placeholder="My Business"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Phone</label>
+            <input
+              value={phone}
+              onChange={event => setPhone(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              placeholder={DEFAULT_PHONE_PLACEHOLDER}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Business email</label>
+            <input
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              placeholder="contact@mybusiness.com"
+            />
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+          >
+            {saving ? 'Saving...' : 'Save changes'}
+          </button>
+        </div>
+      </section>
+
+      {hasPermission('users.read') && (
+        <section className="panel p-6 sm:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="section-kicker">Team Members</p>
+              <h2 className="mt-2 section-heading">Manage who has access to your workspace.</h2>
+            </div>
+            {hasPermission('users.invite') && (
+              <button
+                onClick={() => setShowAddMember(previous => !previous)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                <Plus className="h-4 w-4" />
+                Add member
+              </button>
+            )}
+          </div>
+          {showAddMember && (
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <p className="mb-4 text-sm font-semibold text-slate-900">New team member</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Username</label>
+                  <input
+                    value={newMember.username}
+                    onChange={event => setNewMember(previous => ({ ...previous, username: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Email</label>
+                  <input
+                    value={newMember.email}
+                    onChange={event => setNewMember(previous => ({ ...previous, email: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Password (new users only)</label>
+                  <input
+                    type="password"
+                    value={newMember.password}
+                    onChange={event => setNewMember(previous => ({ ...previous, password: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="Min 8 characters"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Role</label>
+                  <select
+                    value={newMember.role}
+                    onChange={event => setNewMember(previous => ({ ...previous, role: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                  >
+                    {ASSIGNABLE_ROLES.map(role => (
+                      <option key={role} value={role}>
+                        {ROLE_LABELS[role]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {branches.length > 1 && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-600">Branch</label>
+                    <select
+                      value={newMember.branchId}
+                      onChange={event => setNewMember(previous => ({ ...previous, branchId: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    >
+                      <option value="">Primary branch</option>
+                      {branches.map(branch => (
+                        <option key={branch._id} value={branch._id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 flex gap-3">
+                <button
+                  onClick={handleAddMember}
+                  disabled={addingMember}
+                  className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {addingMember ? 'Adding...' : 'Add member'}
+                </button>
+                <button
+                  onClick={() => setShowAddMember(false)}
+                  className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
-        </>
+          <div className="mt-5 space-y-3">
+            {members.length === 0 ? (
+              <p className="text-sm text-slate-500">No team members yet.</p>
+            ) : (
+              members.map(member => (
+                <div key={member._id} className="flex items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-sm font-semibold text-slate-700">
+                      {member.username?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{member.username}</p>
+                      <p className="text-xs text-slate-500">{member.email}</p>
+                      {member.branchName && <p className="text-xs text-slate-400">{member.branchName}</p>}
+                    </div>
+                  </div>
+                  {hasPermission('users.update') && member.role !== 'owner' ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select
+                        value={member.role}
+                        onChange={event => handleMemberUpdate(member._id, event.target.value)}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
+                      >
+                        {ASSIGNABLE_ROLES.map(role => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={member.branchId || ''}
+                        onChange={event => handleMemberUpdate(member._id, member.role, event.target.value)}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
+                      >
+                        <option value="">No branch</option>
+                        {branches.map(branch => (
+                          <option key={branch._id} value={branch._id}>
+                            {branch.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                      {ROLE_LABELS[member.role] || member.role}
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      )}
+
+      {hasPermission('settings.read') && (
+        <section className="panel p-6 sm:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="section-kicker">Branches</p>
+              <h2 className="mt-2 section-heading">Locations running under this organization.</h2>
+            </div>
+            {hasPermission('settings.update') && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
+                <GitBranch className="h-3.5 w-3.5" />
+                {branches.length} branch{branches.length === 1 ? '' : 'es'}
+              </div>
+            )}
+          </div>
+          {hasPermission('settings.update') && (
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <p className="mb-4 text-sm font-semibold text-slate-900">Create branch</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Branch name</label>
+                  <input
+                    value={newBranch.name}
+                    onChange={event => setNewBranch(previous => ({ ...previous, name: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="Downtown Branch"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Code</label>
+                  <input
+                    value={newBranch.code}
+                    onChange={event => setNewBranch(previous => ({ ...previous, code: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="DT01"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Email</label>
+                  <input
+                    value={newBranch.email}
+                    onChange={event => setNewBranch(previous => ({ ...previous, email: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="branch@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Phone</label>
+                  <input
+                    value={newBranch.phone}
+                    onChange={event => setNewBranch(previous => ({ ...previous, phone: event.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder={DEFAULT_PHONE_PLACEHOLDER}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleCreateBranch}
+                disabled={addingBranch}
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+              >
+                <GitBranch className="h-4 w-4" />
+                {addingBranch ? 'Creating...' : 'Create branch'}
+              </button>
+            </div>
+          )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {branches.length === 0 ? (
+              <p className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                No branches found yet.
+              </p>
+            ) : (
+              branches.map(branch => (
+                <div key={branch._id} className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="rounded-2xl bg-white p-2 shadow-sm">
+                    <Shield className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{branch.name}</p>
+                    {branch.code && <p className="text-xs text-slate-500">{branch.code}</p>}
+                  </div>
+                  {branch.isPrimary && (
+                    <span className="ml-auto rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      Primary
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       )}
     </div>
   )

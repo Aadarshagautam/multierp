@@ -1,8 +1,6 @@
-import axios from "axios";
-import { createContext, useState, useEffect, useCallback } from "react";
-import toast from "react-hot-toast";
-
-export const AppContext = createContext();
+import { useState, useEffect, useCallback } from "react";
+import api from "../lib/api.js";
+import AppContext from "./app-context.js";
 
 export const AppContextProvider = (props) => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
@@ -14,52 +12,33 @@ export const AppContextProvider = (props) => {
     const [currentOrgName, setCurrentOrgName] = useState(null);
     const [userRole, setUserRole] = useState(null);
     const [userPermissions, setUserPermissions] = useState([]);
+    const [orgBusinessType, setOrgBusinessType] = useState("general");
+    const [orgSoftwarePlan, setOrgSoftwarePlan] = useState("single-branch");
+    const [branchId, setBranchId] = useState(null);
+    const [branchName, setBranchName] = useState(null);
     const [loading, setLoading] = useState(true);
     const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
-
-    axios.defaults.withCredentials = true;
-
 
     const setIsLoggedin = (value) => {
         setIsLoggedinState(value);
         localStorage.setItem("isLoggedin", value ? "true" : "false");
     };
 
-    const getAuthState = async () => {
-        try {
-          const { data } = await axios.get(
-            backendUrl + "/api/auth/is-auth",
-            { withCredentials: true }
-          );
-      
-          if (data.success) {
-            setIsLoggedin(true);
-            setCurrentOrgId(data.data?.orgId || null);
-            setCurrentOrgName(data.data?.orgName || null);
-            await getUserData();
-          } else {
-            setIsLoggedin(false);
-            setUserData(null);
-            setCurrentOrgId(null);
-            setCurrentOrgName(null);
-          }
-        } catch (error) {
-          if (error.response?.status === 401) {
-            setIsLoggedin(false);
-            setUserData(null);
-            setCurrentOrgId(null);
-            setCurrentOrgName(null);
-          }
-        } finally {
-          setHasCheckedAuth(true);
-          setLoading(false);
-        }
-      };
-      
+    const clearWorkspaceState = useCallback(() => {
+      setUserData(null);
+      setCurrentOrgId(null);
+      setCurrentOrgName(null);
+      setUserRole(null);
+      setUserPermissions([]);
+      setOrgBusinessType("general");
+      setOrgSoftwarePlan("single-branch");
+      setBranchId(null);
+      setBranchName(null);
+    }, []);
 
-    const getUserData = async () => {
+    const getUserData = useCallback(async () => {
       try {
-        const { data } = await axios.get(backendUrl + "/api/user/data");
+        const { data } = await api.get("/user/data");
 
         if (data.success) {
           const user = data.data || null;
@@ -69,25 +48,49 @@ export const AppContextProvider = (props) => {
           setCurrentOrgName(user?.orgName || null);
           setUserRole(user?.role || null);
           setUserPermissions(user?.permissions || []);
+          setOrgBusinessType(user?.orgBusinessType || "general");
+          setOrgSoftwarePlan(user?.orgSoftwarePlan || "single-branch");
+          setBranchId(user?.branchId || null);
+          setBranchName(user?.branchName || null);
         } else {
           setIsLoggedin(false);
-          setUserData(null);
-          setCurrentOrgId(null);
-          setCurrentOrgName(null);
-          setUserRole(null);
-          setUserPermissions([]);
+          clearWorkspaceState();
         }
       } catch (error) {
         if (error.response?.status === 401) {
           setIsLoggedin(false);
-          setUserData(null);
-          setCurrentOrgId(null);
-          setCurrentOrgName(null);
-          setUserRole(null);
-          setUserPermissions([]);
+          clearWorkspaceState();
         }
       }
-    }
+    }, [clearWorkspaceState]);
+
+    const getAuthState = useCallback(async () => {
+        try {
+          const { data } = await api.get("/auth/is-auth");
+      
+          if (data.success) {
+            setIsLoggedin(true);
+            setCurrentOrgId(data.data?.orgId || null);
+            setCurrentOrgName(data.data?.orgName || null);
+            setOrgBusinessType(data.data?.orgBusinessType || "general");
+            setOrgSoftwarePlan(data.data?.orgSoftwarePlan || "single-branch");
+            setBranchId(data.data?.branchId || null);
+            setBranchName(data.data?.branchName || null);
+            await getUserData();
+          } else {
+            setIsLoggedin(false);
+            clearWorkspaceState();
+          }
+        } catch (error) {
+          if (error.response?.status === 401) {
+            setIsLoggedin(false);
+            clearWorkspaceState();
+          }
+        } finally {
+          setHasCheckedAuth(true);
+          setLoading(false);
+        }
+      }, [clearWorkspaceState, getUserData]);
 
     const hasPermission = useCallback((required) => {
       if (!required) return true;
@@ -100,7 +103,7 @@ export const AppContextProvider = (props) => {
 
     useEffect(() => {
         getAuthState();
-    }, [])
+    }, [getAuthState])
 
     const value = {
         backendUrl,
@@ -118,6 +121,11 @@ export const AppContextProvider = (props) => {
         userRole,
         userPermissions,
         hasPermission,
+        orgBusinessType,
+        setOrgBusinessType,
+        orgSoftwarePlan,
+        branchId,
+        branchName,
     }
 
     return (

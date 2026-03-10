@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   Plus, 
   DollarSign, 
@@ -22,12 +22,6 @@ import api from './lib/axios'
 import toast from 'react-hot-toast'
 
 const AccountingPage = () => {
-  const [transactions, setTransactions] = useState([])
-  const [summary, setSummary] = useState({
-    totalIncome: 0,
-    totalExpense: 0,
-    balance: 0,
-  })
   const [monthlySummaries, setMonthlySummaries] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -67,28 +61,14 @@ const AccountingPage = () => {
     { value: '12', label: 'December' },
   ]
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const [transactionsRes, summaryRes] = await Promise.all([
-        api.get('/transactions'),
-        api.get('/transactions/summary')
-      ])
+      const transactionsRes = await api.get('/transactions')
       
       const allTransactions = Array.isArray(transactionsRes.data?.data)
         ? transactionsRes.data.data
         : []
-      const summary = summaryRes.data?.data || {}
-      setTransactions(allTransactions)
-      setSummary({
-        totalIncome: summary.totalIncome || 0,
-        totalExpense: summary.totalExpense || 0,
-        balance: summary.balance || 0,
-      })
       
       const years = [...new Set(allTransactions.map(t => new Date(t.date).getFullYear()))]
       setAvailableYears(years.sort((a, b) => b - a))
@@ -100,7 +80,11 @@ const AccountingPage = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   const calculateMonthlySummaries = (allTransactions) => {
     const monthlyData = {}

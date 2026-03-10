@@ -3,13 +3,29 @@ import Customer from "../customers/model.js";
 import UserModel from "../../core/models/User.js";
 import PDFDocument from "pdfkit";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
+import {
+  DEFAULT_VAT_RATE,
+  PAYMENT_METHOD_LABELS,
+  TAX_REGISTRATION_LABEL,
+  formatCurrencyNpr,
+  formatDateNepal,
+} from "../../core/utils/nepal.js";
+import {
+  buildInvoiceNumber,
+  buildInvoiceSequenceKey,
+  getNextSequence,
+  peekNextSequence,
+} from "../../core/utils/sequence.js";
+import { buildTenantFilter, mergeTenantFilter } from "../../core/utils/tenant.js";
+
+const formatMoney = (value) => `NPR ${formatCurrencyNpr(value)}`;
 
 export const getInvoices = async (req, res) => {
   try {
     const userId = req.userId;
     const { status, startDate, endDate } = req.query;
 
-    const filter = req.orgId ? { orgId: req.orgId } : { userId };
+    const filter = buildTenantFilter(req);
     if (status && status !== "all") filter.status = status;
     if (startDate || endDate) {
       filter.issueDate = {};
@@ -27,10 +43,8 @@ export const getInvoices = async (req, res) => {
 
 export const getInvoice = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
-    const invoice = await Invoice.findOne({ _id: id, ...ownerFilter });
+    const invoice = await Invoice.findOne(mergeTenantFilter(req, { _id: id }));
     if (!invoice) {
       return sendError(res, { status: 404, message: "Invoice not found" });
     }
@@ -43,8 +57,7 @@ export const getInvoice = async (req, res) => {
 
 export const getInvoiceStats = async (req, res) => {
   try {
-    const userId = req.userId;
-    const filter = req.orgId ? { orgId: req.orgId } : { userId };
+    const filter = buildTenantFilter(req);
     const invoices = await Invoice.find(filter);
 
     const stats = {
@@ -84,16 +97,14 @@ export const getInvoiceStats = async (req, res) => {
 export const getNextInvoiceNumber = async (req, res) => {
   try {
     const userId = req.userId;
-    const numFilter = req.orgId ? { orgId: req.orgId } : { userId };
-    const lastInvoice = await Invoice.findOne(numFilter)
-      .sort({ createdAt: -1 })
-      .select("invoiceNumber");
-
-    let nextNumber = "INV-0001";
-    if (lastInvoice && lastInvoice.invoiceNumber) {
-      const lastNum = parseInt(lastInvoice.invoiceNumber.replace("INV-", ""));
-      nextNumber = `INV-${String(lastNum + 1).padStart(4, "0")}`;
-    }
+    const nextSeq = await peekNextSequence(
+      buildInvoiceSequenceKey({ orgId: req.orgId, userId })
+    );
+    const nextNumber = buildInvoiceNumber({
+      orgId: req.orgId,
+      userId,
+      seq: nextSeq,
+    });
 
     return sendSuccess(res, { data: { invoiceNumber: nextNumber } });
   } catch (error) {
@@ -105,7 +116,7 @@ export const getNextInvoiceNumber = async (req, res) => {
 export const createInvoice = async (req, res) => {
   try {
     const userId = req.userId;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+    const ownerFilter = buildTenantFilter(req);
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
       withoutVat, dueDate, paymentMethod, notes, status,
@@ -120,16 +131,14 @@ export const createInvoice = async (req, res) => {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
 
-    // Generate invoice number
-    const numFilter = req.orgId ? { orgId: req.orgId } : { userId };
-    const lastInvoice = await Invoice.findOne(numFilter)
-      .sort({ createdAt: -1 })
-      .select("invoiceNumber");
-    let invoiceNumber = "INV-0001";
-    if (lastInvoice && lastInvoice.invoiceNumber) {
-      const lastNum = parseInt(lastInvoice.invoiceNumber.replace("INV-", ""));
-      invoiceNumber = `INV-${String(lastNum + 1).padStart(4, "0")}`;
-    }
+    const invoiceSeq = await getNextSequence(
+      buildInvoiceSequenceKey({ orgId: req.orgId, userId })
+    );
+    const invoiceNumber = buildInvoiceNumber({
+      orgId: req.orgId,
+      userId,
+      seq: invoiceSeq,
+    });
 
     // Calculate each line item
     let subtotal = 0;
@@ -158,7 +167,7 @@ export const createInvoice = async (req, res) => {
         sku: item.sku || "",
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        vatRate: item.vatRate || 0,
+        vatRate: item.vatRate ?? DEFAULT_VAT_RATE,
         vatAmount: Math.round(vatAmount * 100) / 100,
         discountType: item.discountType || "flat",
         discountValue: item.discountValue || 0,
@@ -214,9 +223,8 @@ export const createInvoice = async (req, res) => {
 
 export const updateInvoice = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+    const ownerFilter = buildTenantFilter(req);
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
       withoutVat, dueDate, paymentMethod, notes, status,
@@ -256,7 +264,7 @@ export const updateInvoice = async (req, res) => {
           sku: item.sku || "",
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          vatRate: item.vatRate || 0,
+          vatRate: item.vatRate ?? DEFAULT_VAT_RATE,
           vatAmount: Math.round(vatAmount * 100) / 100,
           discountType: item.discountType || "flat",
           discountValue: item.discountValue || 0,
@@ -315,10 +323,9 @@ export const updateInvoice = async (req, res) => {
 
 export const updateInvoiceStatus = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
     const { status } = req.body;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+    const ownerFilter = buildTenantFilter(req);
 
     const validStatuses = ["draft", "sent", "paid", "overdue", "cancelled"];
     if (!validStatuses.includes(status)) {
@@ -343,9 +350,8 @@ export const updateInvoiceStatus = async (req, res) => {
 
 export const deleteInvoice = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+    const ownerFilter = buildTenantFilter(req);
 
     const invoice = await Invoice.findOneAndDelete({ _id: id, ...ownerFilter });
     if (!invoice) {
@@ -363,7 +369,7 @@ export const generateInvoicePDF = async (req, res) => {
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const ownerFilter = req.orgId ? { orgId: req.orgId } : { userId: req.userId };
+    const ownerFilter = buildTenantFilter(req);
 
     const invoice = await Invoice.findOne({ _id: id, ...ownerFilter });
     if (!invoice) {
@@ -393,11 +399,13 @@ export const generateInvoicePDF = async (req, res) => {
     doc.text("Invoice No:", 370, detailsY);
     doc.font("Helvetica").text(invoice.invoiceNumber, 450, detailsY);
     doc.font("Helvetica-Bold").text("Issue Date:", 370, detailsY + 15);
-    doc.font("Helvetica").text(new Date(invoice.issueDate).toLocaleDateString("en-IN"), 450, detailsY + 15);
+    doc.font("Helvetica").text(formatDateNepal(invoice.issueDate), 450, detailsY + 15);
     doc.font("Helvetica-Bold").text("Due Date:", 370, detailsY + 30);
-    doc.font("Helvetica").text(new Date(invoice.dueDate).toLocaleDateString("en-IN"), 450, detailsY + 30);
+    doc.font("Helvetica").text(formatDateNepal(invoice.dueDate), 450, detailsY + 30);
     doc.font("Helvetica-Bold").text("Status:", 370, detailsY + 45);
     doc.font("Helvetica").text(invoice.status.toUpperCase(), 450, detailsY + 45);
+    doc.font("Helvetica-Bold").text("Payment:", 370, detailsY + 60);
+    doc.font("Helvetica").text(PAYMENT_METHOD_LABELS[invoice.paymentMethod] || invoice.paymentMethod, 450, detailsY + 60);
 
     // Bill To
     doc.font("Helvetica-Bold").fontSize(10).text("Bill To:", 50, detailsY);
@@ -409,7 +417,7 @@ export const generateInvoicePDF = async (req, res) => {
     if (addr && addr.street) {
       doc.text([addr.street, addr.city, addr.state, addr.pincode].filter(Boolean).join(", "));
     }
-    if (invoice.customerGstin) doc.text(`GSTIN: ${invoice.customerGstin}`);
+    if (invoice.customerGstin) doc.text(`${TAX_REGISTRATION_LABEL}: ${invoice.customerGstin}`);
 
     // Items table header
     const tableTop = 220;
@@ -432,10 +440,10 @@ export const generateInvoicePDF = async (req, res) => {
       }
       doc.text(item.productName, 50, rowY, { width: 170 });
       doc.text(String(item.quantity), 230, rowY);
-      doc.text(`Rs.${item.unitPrice.toLocaleString("en-IN")}`, 270, rowY);
+      doc.text(formatMoney(item.unitPrice), 270, rowY);
       doc.text(invoice.withoutVat ? "0%" : `${item.vatRate}%`, 330, rowY);
-      doc.text(`Rs.${item.discountAmount.toLocaleString("en-IN")}`, 380, rowY);
-      doc.text(`Rs.${item.lineTotal.toLocaleString("en-IN")}`, 460, rowY);
+      doc.text(formatMoney(item.discountAmount), 380, rowY);
+      doc.text(formatMoney(item.lineTotal), 460, rowY);
       rowY += 20;
     });
 
@@ -448,18 +456,18 @@ export const generateInvoicePDF = async (req, res) => {
     doc.font("Helvetica").fontSize(9);
 
     doc.text("Subtotal:", totalsX, totalsY);
-    doc.text(`Rs.${invoice.subtotal.toLocaleString("en-IN")}`, 470, totalsY);
+    doc.text(formatMoney(invoice.subtotal), 470, totalsY);
     totalsY += 18;
 
     if (invoice.totalItemDiscount > 0) {
       doc.text("Item Discounts:", totalsX, totalsY);
-      doc.text(`-Rs.${invoice.totalItemDiscount.toLocaleString("en-IN")}`, 470, totalsY);
+      doc.text(`- ${formatMoney(invoice.totalItemDiscount)}`, 470, totalsY);
       totalsY += 18;
     }
 
     if (!invoice.withoutVat && invoice.totalVat > 0) {
       doc.text("Total VAT:", totalsX, totalsY);
-      doc.text(`Rs.${invoice.totalVat.toLocaleString("en-IN")}`, 470, totalsY);
+      doc.text(formatMoney(invoice.totalVat), 470, totalsY);
       totalsY += 18;
     }
 
@@ -469,7 +477,7 @@ export const generateInvoicePDF = async (req, res) => {
           ? `Overall Discount (${invoice.overallDiscountValue}%):`
           : "Overall Discount:";
       doc.text(label, totalsX, totalsY);
-      doc.text(`-Rs.${invoice.overallDiscountAmount.toLocaleString("en-IN")}`, 470, totalsY);
+      doc.text(`- ${formatMoney(invoice.overallDiscountAmount)}`, 470, totalsY);
       totalsY += 18;
     }
 
@@ -477,7 +485,7 @@ export const generateInvoicePDF = async (req, res) => {
     doc.rect(365, totalsY, 190, 28).fill("#4f46e5");
     doc.fill("#ffffff").font("Helvetica-Bold").fontSize(12);
     doc.text("Grand Total:", 370, totalsY + 7);
-    doc.text(`Rs.${invoice.grandTotal.toLocaleString("en-IN")}`, 470, totalsY + 7);
+    doc.text(formatMoney(invoice.grandTotal), 470, totalsY + 7);
 
     // Notes
     if (invoice.notes) {

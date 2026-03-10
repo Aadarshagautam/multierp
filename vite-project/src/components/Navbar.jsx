@@ -1,7 +1,7 @@
 import React, { useContext } from 'react'
 import { Plus, User, LogOut, Mail, Menu, Bell, Search, LayoutGrid } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { AppContext } from '../context/AppContext'
+import AppContext from '../context/app-context.js'
 import axios from 'axios'
 import { toast } from 'react-hot-toast'
 
