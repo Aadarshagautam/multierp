@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { PRODUCT_MODEL_NAME } from "../../shared/products/constants.js";
 
 const inventorySchema = new mongoose.Schema(
   {
@@ -17,6 +18,12 @@ const inventorySchema = new mongoose.Schema(
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "branch",
+      index: true,
+      default: null,
+    },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: PRODUCT_MODEL_NAME,
       index: true,
       default: null,
     },
@@ -66,6 +73,11 @@ const inventorySchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    barcode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
   },
   { timestamps: true }
 );
@@ -74,6 +86,7 @@ const inventorySchema = new mongoose.Schema(
 inventorySchema.index({ userId: 1, createdAt: -1 });
 inventorySchema.index({ userId: 1, quantity: 1 });
 inventorySchema.index({ orgId: 1, branchId: 1, normalizedName: 1 });
+inventorySchema.index({ orgId: 1, branchId: 1, productId: 1 });
 
 const inventoryMovementSchema = new mongoose.Schema(
   {

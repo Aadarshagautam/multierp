@@ -1,6 +1,7 @@
 import express from "express";
 import userAuth from "../../core/middleware/userAuth.js";
 import permissionMiddleware from "../../core/middleware/permissionMiddleware.js";
+import validateRequest from "../../core/middleware/validate.js";
 
 import {
   createProduct,
@@ -49,7 +50,6 @@ import {
 } from "./controllers/shiftController.js";
 
 import {
-  validate,
   createProductSchema,
   updateProductSchema,
   createCustomerSchema,
@@ -57,6 +57,8 @@ import {
   createSaleSchema,
   createTableSchema,
   updateTableSchema,
+  updateTableStatusSchema,
+  updateOrderStatusSchema,
   reserveTableSchema,
 } from "./validation.js";
 
@@ -91,14 +93,14 @@ router.post(
   "/products",
   userAuth,
   permissionMiddleware("pos.create"),
-  validate(createProductSchema),
+  validateRequest({ body: createProductSchema }),
   createProduct
 );
 router.patch(
   "/products/:id",
   userAuth,
   permissionMiddleware("pos.update"),
-  validate(updateProductSchema),
+  validateRequest({ body: updateProductSchema }),
   updateProduct
 );
 router.delete(
@@ -125,14 +127,14 @@ router.post(
   "/customers",
   userAuth,
   permissionMiddleware("pos.create"),
-  validate(createCustomerSchema),
+  validateRequest({ body: createCustomerSchema }),
   createCustomer
 );
 router.patch(
   "/customers/:id",
   userAuth,
   permissionMiddleware("pos.update"),
-  validate(updateCustomerSchema),
+  validateRequest({ body: updateCustomerSchema }),
   updateCustomer
 );
 router.delete(
@@ -165,7 +167,7 @@ router.post(
   "/sales",
   userAuth,
   permissionMiddleware("pos.create"),
-  validate(createSaleSchema),
+  validateRequest({ body: createSaleSchema }),
   createSale
 );
 router.post(
@@ -178,6 +180,7 @@ router.patch(
   "/sales/:id/order-status",
   userAuth,
   permissionMiddleware("pos.update"),
+  validateRequest({ body: updateOrderStatusSchema }),
   updateOrderStatus
 );
 
@@ -191,10 +194,10 @@ router.get(
 
 // ─── Tables ───
 router.get("/tables", userAuth, permissionMiddleware("pos.read"), getTables);
-router.post("/tables", userAuth, permissionMiddleware("pos.create"), validate(createTableSchema), createTable);
-router.patch("/tables/:id", userAuth, permissionMiddleware("pos.update"), validate(updateTableSchema), updateTable);
-router.patch("/tables/:id/status", userAuth, permissionMiddleware("pos.update"), updateTableStatus);
-router.patch("/tables/:id/reservation", userAuth, permissionMiddleware("pos.update"), validate(reserveTableSchema), reserveTable);
+router.post("/tables", userAuth, permissionMiddleware("pos.create"), validateRequest({ body: createTableSchema }), createTable);
+router.patch("/tables/:id", userAuth, permissionMiddleware("pos.update"), validateRequest({ body: updateTableSchema }), updateTable);
+router.patch("/tables/:id/status", userAuth, permissionMiddleware("pos.update"), validateRequest({ body: updateTableStatusSchema }), updateTableStatus);
+router.patch("/tables/:id/reservation", userAuth, permissionMiddleware("pos.update"), validateRequest({ body: reserveTableSchema }), reserveTable);
 router.delete("/tables/:id/reservation", userAuth, permissionMiddleware("pos.update"), cancelTableReservation);
 router.delete("/tables/:id", userAuth, permissionMiddleware("pos.delete"), deleteTable);
 

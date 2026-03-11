@@ -3,12 +3,33 @@ import Inventory from "./model.js";
 import { InventoryMovement } from "./model.js";
 import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
+import { syncProductFromInventoryItem } from "../../shared/products/service.js";
 import {
     adjustInventoryQuantity,
     buildInventoryScopeFilter,
     getInventoryBranchId,
     normalizeInventoryName,
 } from "./stockService.js";
+
+const buildInventorySnapshot = ({ payload, product }) => {
+    const productName = product?.name || payload.productName?.trim() || "";
+    const quantity = Number(payload.quantity) || 0;
+
+    return {
+        productId: product?._id || payload.productId || null,
+        productName,
+        normalizedName: normalizeInventoryName(productName),
+        quantity,
+        costPrice: product?.costPrice ?? Number(payload.costPrice) ?? 0,
+        sellingPrice: product?.sellingPrice ?? Number(payload.sellingPrice) ?? 0,
+        category: product?.category || payload.category || "",
+        supplier: payload.supplier?.trim() || "",
+        lowStockAlert: product?.lowStockAlert ?? Number(payload.lowStockAlert) ?? 10,
+        vatRate: product?.taxRate ?? Number(payload.vatRate) ?? 0,
+        sku: product?.sku || payload.sku || "",
+        barcode: product?.barcode || payload.barcode || "",
+    };
+};
 
 // Get all inventory items
 export const getInventory = async (req, res) => {
@@ -24,76 +45,102 @@ export const getInventory = async (req, res) => {
 
 // Create inventory item
 export const createInventoryItem = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const userId = req.userId;
-        const { productName, quantity, costPrice, sellingPrice, category, supplier, lowStockAlert, vatRate, sku } = req.body;
-
-        if (!productName || quantity === undefined || !costPrice || !sellingPrice) {
-            return sendError(res, { status: 400, message: "Required fields missing" });
-        }
+        const payload = req.validated?.body ?? req.body;
+        const product = await syncProductFromInventoryItem({
+            inventoryItem: payload,
+            context: req,
+            productId: payload.productId,
+            session,
+        });
+        const snapshot = buildInventorySnapshot({ payload, product });
 
         const item = new Inventory({
-            productName,
-            quantity,
-            costPrice,
-            sellingPrice,
-            category,
-            supplier,
-            lowStockAlert,
-            vatRate,
-            sku,
+            ...snapshot,
             userId,
             orgId: req.orgId,
             branchId: getInventoryBranchId(req),
-            normalizedName: normalizeInventoryName(productName),
         });
 
-        await item.save();
+        await item.save({ session });
+        await session.commitTransaction();
         return sendCreated(res, item, "Inventory item created");
     } catch (error) {
+        await session.abortTransaction();
         console.error(error);
         return sendError(res, { status: 500, message: "Server error" });
+    } finally {
+        session.endSession();
     }
 };
 
 // Update inventory item
 export const updateInventoryItem = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const ownerFilter = buildInventoryScopeFilter(req);
         const { id } = req.params;
-        const updates = pick(req.body, [
-            "productName",
-            "quantity",
-            "costPrice",
-            "sellingPrice",
-            "category",
-            "supplier",
-            "lowStockAlert",
-            "vatRate",
-            "sku",
-        ]);
-
-        if (updates.productName) {
-            updates.normalizedName = normalizeInventoryName(updates.productName);
-        }
-
-        if (Object.keys(updates).length === 0) {
-            return sendError(res, { status: 400, message: "No valid fields to update" });
-        }
-
-        const item = await Inventory.findOneAndUpdate(
-            { _id: id, ...ownerFilter },
-            { $set: updates },
-            { new: true, runValidators: true }
-        );
-        if (!item) {
+        const updates = req.validated?.body ?? req.body;
+        const existing = await Inventory.findOne({ _id: id, ...ownerFilter }).session(session);
+        if (!existing) {
+            await session.abortTransaction();
             return sendError(res, { status: 404, message: "Item not found" });
         }
 
-        return sendSuccess(res, { data: item, message: "Item updated" });
+        const mergedPayload = pick(
+            {
+                productId: updates.productId ?? existing.productId?.toString() ?? null,
+                productName: updates.productName ?? existing.productName,
+                quantity: updates.quantity ?? existing.quantity,
+                costPrice: updates.costPrice ?? existing.costPrice,
+                sellingPrice: updates.sellingPrice ?? existing.sellingPrice,
+                category: updates.category ?? existing.category,
+                supplier: updates.supplier ?? existing.supplier,
+                lowStockAlert: updates.lowStockAlert ?? existing.lowStockAlert,
+                vatRate: updates.vatRate ?? existing.vatRate,
+                sku: updates.sku ?? existing.sku,
+                barcode: updates.barcode ?? existing.barcode,
+            },
+            [
+                "productId",
+                "productName",
+                "quantity",
+                "costPrice",
+                "sellingPrice",
+                "category",
+                "supplier",
+                "lowStockAlert",
+                "vatRate",
+                "sku",
+                "barcode",
+            ]
+        );
+
+        const product = await syncProductFromInventoryItem({
+            inventoryItem: mergedPayload,
+            context: req,
+            productId: mergedPayload.productId || existing.productId,
+            session,
+        });
+        const snapshot = buildInventorySnapshot({ payload: mergedPayload, product });
+
+        Object.assign(existing, snapshot);
+        await existing.save({ session });
+
+        await session.commitTransaction();
+        return sendSuccess(res, { data: existing, message: "Item updated" });
     } catch (error) {
+        await session.abortTransaction();
         console.error(error);
         return sendError(res, { status: 500, message: "Server error" });
+    } finally {
+        session.endSession();
     }
 };
 
@@ -135,7 +182,7 @@ export const createInventoryAdjustment = async (req, res) => {
 
     try {
         const { id } = req.params;
-        const { quantityDelta, reason = "", note = "" } = req.body;
+        const { quantityDelta, reason = "", note = "" } = req.validated?.body ?? req.body;
         const numericDelta = Number(quantityDelta);
 
         if (!Number.isFinite(numericDelta) || numericDelta === 0) {

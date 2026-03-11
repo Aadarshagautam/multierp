@@ -1,15 +1,7 @@
 import mongoose from "mongoose";
+import { PURCHASE_PAYMENT_METHOD_VALUES } from "../../shared/payment-methods/index.js";
 
-const purchasePaymentMethods = [
-  "cash",
-  "card",
-  "bank_transfer",
-  "esewa",
-  "khalti",
-  "credit",
-  "cheque",
-  "other",
-];
+const purchasePaymentMethods = [...PURCHASE_PAYMENT_METHOD_VALUES];
 
 const supplierSchema = new mongoose.Schema(
   {

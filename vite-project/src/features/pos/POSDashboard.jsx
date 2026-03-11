@@ -1,10 +1,11 @@
 import React, { useContext } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, ChefHat, Clock, Package, ShoppingCart, Table2, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ChefHat, Clock, Package, ShoppingCart, Table2, TrendingUp } from 'lucide-react'
 import { posProductApi, posSaleApi, posShiftApi, posTableApi } from '../../api/posApi'
 import { getBusinessPosMeta } from '../../config/businessConfigs.js'
 import AppContext from '../../context/app-context.js'
+import { EmptyCard, KpiCard, PageHeader, SectionCard, WorkspacePage } from '../../components/ui/ErpPrimitives.jsx'
 import { formatShortCurrencyNpr } from '../../utils/nepal.js'
 import POSDashboardCharts from './POSDashboardCharts.jsx'
 
@@ -21,32 +22,7 @@ const TABLE_STATUS_STYLE = {
   cleaning: 'bg-gray-50 border-gray-200 text-gray-500',
 }
 
-const colorMap = {
-  indigo: 'bg-indigo-50 text-indigo-600',
-  teal: 'bg-teal-50 text-teal-600',
-  amber: 'bg-amber-50 text-amber-600',
-  rose: 'bg-rose-50 text-rose-600',
-}
-
 const formatMoney = value => formatShortCurrencyNpr(value || 0)
-
-const StatCard = ({ icon: Icon, label, value, sub, color = 'indigo', to }) => {
-  const content = (
-    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-start justify-between">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${colorMap[color]}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        {to && <ArrowRight className="h-4 w-4 text-gray-300" />}
-      </div>
-      <p className="mt-3 text-2xl font-bold text-gray-900">{value}</p>
-      <p className="mt-0.5 text-sm text-gray-500">{label}</p>
-      {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
-    </div>
-  )
-
-  return to ? <Link to={to}>{content}</Link> : content
-}
 
 export default function POSDashboard() {
   const { branchName, orgBusinessType } = useContext(AppContext)
@@ -109,66 +85,69 @@ export default function POSDashboard() {
   const modeChips = posMeta.orderTypes.map(type => ORDER_TYPE_LABELS[type])
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 pt-20 lg:pl-[17.5rem]">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{posMeta.dashboardTitle}</h1>
-            <p className="text-sm text-gray-500">
-              {new Date().toLocaleDateString('en-NP', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
-            <p className="mt-1 text-sm text-gray-500">{posMeta.dashboardSummary}</p>
-            {branchName && <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-indigo-600">Branch: {branchName}</p>}
-          </div>
-
-          {shift ? (
-            <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-500" />
-              <span className="text-sm font-medium text-green-700">Shift Open</span>
+    <WorkspacePage className="mx-auto max-w-7xl">
+      <PageHeader
+        eyebrow="POS Control"
+        title={posMeta.dashboardTitle}
+        description={posMeta.dashboardSummary}
+        badges={[
+          new Date().toLocaleDateString('en-NP', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          branchName ? `Branch: ${branchName}` : 'Main workspace',
+          shift ? 'Shift open' : 'Shift not opened',
+        ]}
+        actions={
+          shift ? (
+            <div className="erp-chip border-emerald-200 bg-emerald-50 text-emerald-700">
+              <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+              Shift is open
             </div>
           ) : (
-            <Link to="/pos/shifts" className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 transition-colors hover:bg-amber-100">
-              <Clock className="h-4 w-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-700">Open Shift</span>
+            <Link to="/pos/shifts" className="btn-primary">
+              <Clock className="h-4 w-4" />
+              Open shift
             </Link>
-          )}
-        </div>
+          )
+        }
+      />
 
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon={TrendingUp} label="Today's Revenue" value={formatMoney(stats.todayRevenue)} sub={`${stats.todaySales || 0} transactions`} color="indigo" />
-          <StatCard icon={ShoppingCart} label="Total Revenue" value={formatMoney(stats.totalRevenue)} sub={`${stats.totalSales || 0} all-time sales`} color="teal" />
-          {posMeta.allowTables ? (
-            <StatCard icon={Table2} label="Tables" value={`${occupiedCount}/${tables.length}`} sub={`${availableCount} available now`} color="amber" to="/pos/tables" />
-          ) : (
-            <StatCard icon={Clock} label="Shift" value={shift ? 'Open' : 'Closed'} sub={shift ? 'Reconcile before close' : 'Open before billing'} color="amber" to="/pos/shifts" />
-          )}
-          <StatCard icon={AlertTriangle} label="Low Stock" value={lowStock.length} sub="products need restock" color="rose" to="/pos/products" />
-        </div>
+      <section className="grid gap-4 lg:grid-cols-4">
+        <KpiCard icon={TrendingUp} title="Today revenue" value={formatMoney(stats.todayRevenue)} detail={`${stats.todaySales || 0} transactions today`} tone="blue" to="/pos/sales" ctaLabel="Review sales" />
+        <KpiCard icon={ShoppingCart} title="Total revenue" value={formatMoney(stats.totalRevenue)} detail={`${stats.totalSales || 0} all-time sales`} tone="teal" to="/pos/sales" ctaLabel="See history" />
+        {posMeta.allowTables ? (
+          <KpiCard icon={Table2} title="Tables in use" value={`${occupiedCount}/${tables.length || 0}`} detail={`${availableCount} available now`} tone="amber" to="/pos/tables" ctaLabel="Open floor plan" />
+        ) : (
+          <KpiCard icon={Clock} title="Shift" value={shift ? 'Open' : 'Closed'} detail={shift ? 'Reconcile before close' : 'Open before billing'} tone="amber" to="/pos/shifts" ctaLabel="Manage shift" />
+        )}
+        <KpiCard icon={AlertTriangle} title="Low stock" value={lowStock.length} detail="Products that need restock soon" tone="rose" to="/pos/products" ctaLabel="Manage products" />
+      </section>
 
+      <SectionCard
+        eyebrow="Daily Trend"
+        title="Watch revenue, orders, and rush patterns together."
+        description="This view should help the owner or floor manager decide what needs attention in seconds."
+      >
         <POSDashboardCharts dailyChart={chartData.dailyChart} pieData={chartData.pieData} hourlyData={chartData.hourlyData} />
+      </SectionCard>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {posMeta.allowTables ? (
-            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-700">Floor Status</h3>
-                <Link to="/pos/tables" className="text-xs font-medium text-indigo-600 hover:underline">
-                  Floor Plan
-                </Link>
-              </div>
+            <SectionCard
+              title="Floor status"
+              description="Keep open tables, reserved covers, and seat availability visible to the front desk."
+              action={<Link to="/pos/tables" className="text-sm font-semibold text-slate-900">Floor plan</Link>}
+            >
               {tables.length === 0 ? (
-                <div className="py-10 text-center text-gray-400">
-                  <Table2 className="mx-auto mb-2 h-8 w-8" />
-                  <p className="text-sm">No tables configured</p>
-                  <Link to="/pos/tables" className="mt-1 inline-block text-xs text-indigo-600 hover:underline">
-                    Set up tables
-                  </Link>
-                </div>
+                <EmptyCard
+                  icon={Table2}
+                  title="No tables configured"
+                  message="Set up the floor plan first so dine-in service stays clear for hosts and cashiers."
+                  action={<Link to="/pos/tables" className="btn-secondary">Set up tables</Link>}
+                />
               ) : (
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-7">
                   {tables.slice(0, 14).map(table => (
@@ -179,41 +158,38 @@ export default function POSDashboard() {
                   ))}
                 </div>
               )}
-            </div>
+            </SectionCard>
           ) : (
-            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-700">Selling Modes</h3>
-                <Link to="/pos/billing" className="text-xs font-medium text-indigo-600 hover:underline">
-                  Start billing
-                </Link>
-              </div>
+            <SectionCard
+              title="Selling modes"
+              description="Keep the main order paths obvious so new cashiers can work with less training."
+              action={<Link to="/pos/billing" className="text-sm font-semibold text-slate-900">Start billing</Link>}
+            >
               <div className="flex flex-wrap gap-2">
                 {modeChips.map(label => (
-                  <span key={label} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  <span key={label} className="erp-chip">
                     {label}
                   </span>
                 ))}
               </div>
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="erp-subtle mt-6">
                 <p className="text-sm font-semibold text-slate-900">Focused workflow</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{posMeta.dashboardSummary}</p>
               </div>
-            </div>
+            </SectionCard>
           )}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-700">Low Stock Alerts</h3>
-              <Link to="/pos/products" className="text-xs font-medium text-indigo-600 hover:underline">
-                Manage
-              </Link>
-            </div>
+          <SectionCard
+            title="Low-stock alerts"
+            description="Stock warnings should stay visible before they slow down the next shift."
+            action={<Link to="/pos/products" className="text-sm font-semibold text-slate-900">Manage</Link>}
+          >
             {lowStock.length === 0 ? (
-              <div className="py-10 text-center text-gray-400">
-                <Package className="mx-auto mb-2 h-8 w-8" />
-                <p className="text-sm">All products well-stocked</p>
-              </div>
+              <EmptyCard
+                icon={Package}
+                title="All products are stocked"
+                message="No urgent replenishment is needed right now."
+              />
             ) : (
               <div className="max-h-52 divide-y divide-gray-50 overflow-y-auto">
                 {lowStock.slice(0, 8).map(product => (
@@ -229,18 +205,22 @@ export default function POSDashboard() {
                 ))}
               </div>
             )}
-          </div>
-        </div>
+          </SectionCard>
+      </div>
 
+      <SectionCard
+        eyebrow="Quick Actions"
+        title="Keep the next cashier and floor actions one tap away."
+      >
         <div className={`grid gap-3 ${quickActions.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
           {quickActions.map(({ to, icon: Icon, label, bg }) => (
-            <Link key={to} to={to} className={`${bg} flex flex-col items-center gap-2.5 rounded-2xl p-4 text-white transition-colors`}>
+            <Link key={to} to={to} className={`${bg} flex flex-col items-center gap-2.5 rounded-3xl p-4 text-white transition-colors`}>
               <Icon className="h-6 w-6" />
               <span className="text-sm font-semibold">{label}</span>
             </Link>
           ))}
         </div>
-      </div>
-    </div>
+      </SectionCard>
+    </WorkspacePage>
   )
 }

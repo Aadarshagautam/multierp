@@ -1,6 +1,6 @@
-import React, { useContext, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Building2, ChevronRight, LayoutGrid, LogOut, Mail, Menu, Sparkles, User, X } from 'lucide-react'
+import { Bell, Building2, ChevronRight, LayoutGrid, LogOut, Mail, Menu, Receipt, ShoppingCart, Sparkles, User, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AppContext from '../context/app-context.js'
 import { getActiveAppForBusiness, getAppsForBusiness, getBusinessMeta, isMenuItemActive } from '../config/businessConfigs'
@@ -14,6 +14,22 @@ const accentClasses = {
   orange: { bg: 'bg-orange-50', text: 'text-orange-900', border: 'border-orange-200', icon: 'bg-orange-100 text-orange-700' },
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-900', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700' },
   slate: { bg: 'bg-stone-100', text: 'text-stone-800', border: 'border-stone-200', icon: 'bg-stone-200 text-stone-700' },
+}
+
+const getPrimaryActionForBusiness = (businessType) => {
+  if (businessType === 'shop') {
+    return { label: 'Start billing', path: '/pos/billing', icon: ShoppingCart }
+  }
+
+  if (businessType === 'restaurant') {
+    return { label: 'Open service', path: '/pos/billing', icon: ShoppingCart }
+  }
+
+  if (businessType === 'cafe') {
+    return { label: 'Open counter', path: '/pos/billing', icon: ShoppingCart }
+  }
+
+  return { label: 'Open command center', path: '/dashboard', icon: Receipt }
 }
 
 const DashboardLayout = () => {
@@ -39,7 +55,21 @@ const DashboardLayout = () => {
 
 const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
   const navigate = useNavigate()
-  const { userData, setUserData, setIsLoggedin, isLoggedin, currentOrgName } = useContext(AppContext)
+  const profileRef = useRef(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const { userData, setUserData, setIsLoggedin, isLoggedin, currentOrgName, orgBusinessType } = useContext(AppContext)
+  const primaryAction = getPrimaryActionForBusiness(orgBusinessType)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const sendVerificationOtp = async () => {
     try {
@@ -71,7 +101,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
 
   return (
     <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-[rgba(255,250,242,0.88)] backdrop-blur-xl">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 lg:pl-[17rem] lg:pr-6">
+      <div className="flex min-h-16 items-center justify-between gap-4 px-4 py-2 lg:pl-[17rem] lg:pr-6">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={toggleSidebar}
@@ -91,7 +121,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
           </Link>
 
           {activeApp && (
-            <div className="hidden min-w-0 items-center gap-3 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5 md:flex">
+            <div className="hidden min-w-0 items-center gap-3 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5 xl:flex">
               <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-slate-800">{activeApp.name}</p>
@@ -112,12 +142,20 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
 
           {isLoggedin ? (
             <>
+              <button
+                onClick={() => navigate(primaryAction.path)}
+                className="hidden rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 lg:inline-flex"
+              >
+                {primaryAction.label}
+              </button>
+
               <Link
                 to="/apps"
-                className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                 title="Open work areas"
               >
                 <LayoutGrid className="h-5 w-5" />
+                <span className="hidden md:inline">Work areas</span>
               </Link>
 
               <button className="relative rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50">
@@ -125,8 +163,11 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
                 {userData && !userData.isAccountVerified && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}
               </button>
 
-              <div className="group relative">
-                <button className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 transition hover:bg-slate-50">
+              <div ref={profileRef} className="relative">
+                <button
+                  onClick={() => setProfileOpen((open) => !open)}
+                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 transition hover:bg-slate-50"
+                >
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900 via-emerald-700 to-amber-500 text-sm font-semibold text-white">
                     {userData?.username?.[0]?.toUpperCase() || 'U'}
                   </div>
@@ -136,7 +177,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
                   </div>
                 </button>
 
-                <div className="invisible absolute right-0 mt-2 w-72 overflow-hidden rounded-3xl border border-slate-200 bg-white opacity-0 shadow-2xl transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                <div className={`absolute right-0 mt-2 w-72 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl transition-all duration-150 ${profileOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
                   <div className="border-b border-slate-100 px-4 py-4">
                     <p className="truncate text-sm font-semibold text-slate-900">{userData?.username || 'User'}</p>
                     <p className="truncate text-xs text-slate-500">{userData?.email}</p>
@@ -156,6 +197,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
 
                     <Link
                       to="/dashboard"
+                      onClick={() => setProfileOpen(false)}
                       className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
                     >
                       <User className="h-4 w-4 text-slate-500" />
@@ -194,6 +236,8 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
   const { hasPermission } = useContext(AppContext)
   const apps = getAppsForBusiness(businessType)
   const businessMeta = getBusinessMeta(businessType)
+  const primaryAction = getPrimaryActionForBusiness(businessType)
+  const PrimaryActionIcon = primaryAction.icon
 
   const visibleApps = apps.filter(app => app.id !== 'settings').filter(app => !app.permission || hasPermission(app.permission))
   const settingsApp = apps.find(app => app.id === 'settings')
@@ -224,11 +268,18 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">{businessMeta.shortLabel}</p>
             <h2 className="mt-1.5 text-sm font-semibold text-slate-900">{businessMeta.productName}</h2>
             <p className="mt-1 text-xs leading-5 text-slate-600">{businessMeta.workspaceSummary}</p>
+            <button
+              onClick={() => handleMenuClick(primaryAction.path)}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <PrimaryActionIcon className="h-4 w-4" />
+              {primaryAction.label}
+            </button>
           </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Work Areas</div>
+          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Primary Areas</div>
 
           <div className="space-y-1.5">
             {visibleApps.map(app => {

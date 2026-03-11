@@ -7,7 +7,7 @@ import {
 import asyncHandler from "../asyncHandler.js";
 
 export const createCustomer = asyncHandler(async (req, res) => {
-  const customer = await customerService.create(req.validated, req);
+  const customer = await customerService.create(req.validated?.body ?? req.body, req);
   return sendCreated(res, customer, "Customer created");
 });
 
@@ -23,7 +23,14 @@ export const getCustomer = asyncHandler(async (req, res) => {
 });
 
 export const updateCustomer = asyncHandler(async (req, res) => {
-  const customer = await customerService.update(req.params.id, req.validated, req);
+  const customer = await customerService.update(
+    req.params.id,
+    req.validated?.body ?? req.body,
+    req
+  );
+  if (customer === undefined) {
+    return sendError(res, { status: 400, message: "No valid fields to update" });
+  }
   if (!customer) return sendError(res, { status: 404, message: "Customer not found" });
   return sendSuccess(res, { data: customer, message: "Customer updated" });
 });

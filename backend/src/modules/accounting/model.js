@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ACCOUNTING_PAYMENT_METHOD_VALUES } from "../../shared/payment-methods/index.js";
 
 const transactionSchema = new mongoose.Schema(
   {
@@ -37,7 +38,7 @@ const transactionSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["cash", "card", "bank_transfer", "other"],
+      enum: ACCOUNTING_PAYMENT_METHOD_VALUES,
       default: "cash",
     },
   },

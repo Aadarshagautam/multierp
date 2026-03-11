@@ -1,15 +1,14 @@
-import Invoice from "./model.js";
-import Customer from "../customers/model.js";
+import Invoice from "../../shared/invoices/model.js";
 import UserModel from "../../core/models/User.js";
 import PDFDocument from "pdfkit";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
 import {
-  DEFAULT_VAT_RATE,
   PAYMENT_METHOD_LABELS,
   TAX_REGISTRATION_LABEL,
   formatCurrencyNpr,
   formatDateNepal,
 } from "../../core/utils/nepal.js";
+import { calculateInvoiceTotals } from "../../shared/invoices/calculations.js";
 import {
   buildInvoiceNumber,
   buildInvoiceSequenceKey,
@@ -17,6 +16,8 @@ import {
   peekNextSequence,
 } from "../../core/utils/sequence.js";
 import { buildTenantFilter, mergeTenantFilter } from "../../core/utils/tenant.js";
+import { hydrateInvoiceItemsWithProducts } from "../../shared/products/service.js";
+import { sharedCustomerService } from "../../shared/customers/service.js";
 
 const formatMoney = (value) => `NPR ${formatCurrencyNpr(value)}`;
 
@@ -120,16 +121,15 @@ export const createInvoice = async (req, res) => {
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
       withoutVat, dueDate, paymentMethod, notes, status,
-    } = req.body;
+    } = req.validated?.body ?? req.body;
 
-    if (!customerId || !items || items.length === 0 || !dueDate) {
-      return sendError(res, { status: 400, message: "Customer, items, and due date are required" });
-    }
-
-    const customer = await Customer.findOne({ _id: customerId, ...ownerFilter });
+    const customer = await sharedCustomerService.getById(customerId, req, {
+      branchMode: "all",
+    });
     if (!customer) {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
+    const customerSnapshot = sharedCustomerService.buildSnapshot(customer);
 
     const invoiceSeq = await getNextSequence(
       buildInvoiceSequenceKey({ orgId: req.orgId, userId })
@@ -139,73 +139,33 @@ export const createInvoice = async (req, res) => {
       userId,
       seq: invoiceSeq,
     });
-
-    // Calculate each line item
-    let subtotal = 0;
-    let totalVat = 0;
-    let totalItemDiscount = 0;
-
-    const processedItems = items.map((item) => {
-      const baseAmount = item.quantity * item.unitPrice;
-      const discountAmount =
-        item.discountType === "percentage"
-          ? baseAmount * ((item.discountValue || 0) / 100)
-          : item.discountValue || 0;
-      const afterDiscount = baseAmount - discountAmount;
-      const vatAmount = withoutVat
-        ? 0
-        : afterDiscount * ((item.vatRate || 0) / 100);
-      const lineTotal = afterDiscount + vatAmount;
-
-      subtotal += baseAmount;
-      totalVat += vatAmount;
-      totalItemDiscount += discountAmount;
-
-      return {
-        productId: item.productId,
-        productName: item.productName,
-        sku: item.sku || "",
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        vatRate: item.vatRate ?? DEFAULT_VAT_RATE,
-        vatAmount: Math.round(vatAmount * 100) / 100,
-        discountType: item.discountType || "flat",
-        discountValue: item.discountValue || 0,
-        discountAmount: Math.round(discountAmount * 100) / 100,
-        lineTotal: Math.round(lineTotal * 100) / 100,
-      };
+    const hydratedItems = await hydrateInvoiceItemsWithProducts(items, req);
+    const totals = calculateInvoiceTotals({
+      items: hydratedItems,
+      overallDiscountType: overallDiscountType || "none",
+      overallDiscountValue: overallDiscountValue || 0,
+      withoutVat: withoutVat || false,
     });
-
-    // Invoice-level discount
-    const afterItems = subtotal - totalItemDiscount + totalVat;
-    let overallDiscountAmount = 0;
-    if (overallDiscountType === "percentage") {
-      overallDiscountAmount = afterItems * ((overallDiscountValue || 0) / 100);
-    } else if (overallDiscountType === "flat") {
-      overallDiscountAmount = overallDiscountValue || 0;
-    }
-
-    const grandTotal = afterItems - overallDiscountAmount;
 
     const invoice = new Invoice({
       userId,
       orgId: req.orgId,
       invoiceNumber,
-      customerId: customer._id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      customerAddress: customer.address,
-      customerGstin: customer.gstin,
-      items: processedItems,
-      subtotal: Math.round(subtotal * 100) / 100,
-      totalVat: Math.round(totalVat * 100) / 100,
-      totalItemDiscount: Math.round(totalItemDiscount * 100) / 100,
-      overallDiscountType: overallDiscountType || "none",
-      overallDiscountValue: overallDiscountValue || 0,
-      overallDiscountAmount: Math.round(overallDiscountAmount * 100) / 100,
-      grandTotal: Math.round(grandTotal * 100) / 100,
-      withoutVat: withoutVat || false,
+      customerId: customerSnapshot.customerId,
+      customerName: customerSnapshot.customerName,
+      customerEmail: customerSnapshot.customerEmail,
+      customerPhone: customerSnapshot.customerPhone,
+      customerAddress: customerSnapshot.customerAddress,
+      customerGstin: customerSnapshot.customerGstin,
+      items: totals.items,
+      subtotal: totals.subtotal,
+      totalVat: totals.totalVat,
+      totalItemDiscount: totals.totalItemDiscount,
+      overallDiscountType: totals.overallDiscountType,
+      overallDiscountValue: totals.overallDiscountValue,
+      overallDiscountAmount: totals.overallDiscountAmount,
+      grandTotal: totals.grandTotal,
+      withoutVat: totals.withoutVat,
       status: status || "draft",
       issueDate: new Date(),
       dueDate: new Date(dueDate),
@@ -228,90 +188,66 @@ export const updateInvoice = async (req, res) => {
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
       withoutVat, dueDate, paymentMethod, notes, status,
-    } = req.body;
+    } = req.validated?.body ?? req.body;
 
     const invoice = await Invoice.findOne({ _id: id, ...ownerFilter });
     if (!invoice) {
       return sendError(res, { status: 404, message: "Invoice not found" });
     }
 
-    // Recalculate if items changed
-    if (items && items.length > 0) {
-      let subtotal = 0;
-      let totalVat = 0;
-      let totalItemDiscount = 0;
+    const shouldRecalculate = Boolean(
+      items ||
+      overallDiscountType !== undefined ||
+      overallDiscountValue !== undefined ||
+      withoutVat !== undefined
+    );
 
-      const processedItems = items.map((item) => {
-        const baseAmount = item.quantity * item.unitPrice;
-        const discountAmount =
-          item.discountType === "percentage"
-            ? baseAmount * ((item.discountValue || 0) / 100)
-            : item.discountValue || 0;
-        const afterDiscount = baseAmount - discountAmount;
-        const useWithoutVat = withoutVat !== undefined ? withoutVat : invoice.withoutVat;
-        const vatAmount = useWithoutVat
-          ? 0
-          : afterDiscount * ((item.vatRate || 0) / 100);
-        const lineTotal = afterDiscount + vatAmount;
-
-        subtotal += baseAmount;
-        totalVat += vatAmount;
-        totalItemDiscount += discountAmount;
-
-        return {
-          productId: item.productId,
-          productName: item.productName,
-          sku: item.sku || "",
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          vatRate: item.vatRate ?? DEFAULT_VAT_RATE,
-          vatAmount: Math.round(vatAmount * 100) / 100,
-          discountType: item.discountType || "flat",
-          discountValue: item.discountValue || 0,
-          discountAmount: Math.round(discountAmount * 100) / 100,
-          lineTotal: Math.round(lineTotal * 100) / 100,
-        };
+    if (shouldRecalculate) {
+      const hydratedItems = items
+        ? await hydrateInvoiceItemsWithProducts(items, req)
+        : invoice.items;
+      const totals = calculateInvoiceTotals({
+        items: hydratedItems,
+        overallDiscountType: overallDiscountType || invoice.overallDiscountType,
+        overallDiscountValue:
+          overallDiscountValue !== undefined
+            ? overallDiscountValue
+            : invoice.overallDiscountValue,
+        withoutVat: withoutVat !== undefined ? withoutVat : invoice.withoutVat,
       });
 
-      const discType = overallDiscountType || invoice.overallDiscountType;
-      const discVal = overallDiscountValue !== undefined ? overallDiscountValue : invoice.overallDiscountValue;
-      const afterItems = subtotal - totalItemDiscount + totalVat;
-      let overallDiscountAmount = 0;
-      if (discType === "percentage") {
-        overallDiscountAmount = afterItems * ((discVal || 0) / 100);
-      } else if (discType === "flat") {
-        overallDiscountAmount = discVal || 0;
-      }
-
-      invoice.items = processedItems;
-      invoice.subtotal = Math.round(subtotal * 100) / 100;
-      invoice.totalVat = Math.round(totalVat * 100) / 100;
-      invoice.totalItemDiscount = Math.round(totalItemDiscount * 100) / 100;
-      invoice.overallDiscountType = discType;
-      invoice.overallDiscountValue = discVal;
-      invoice.overallDiscountAmount = Math.round(overallDiscountAmount * 100) / 100;
-      invoice.grandTotal = Math.round((afterItems - overallDiscountAmount) * 100) / 100;
+      invoice.items = totals.items;
+      invoice.subtotal = totals.subtotal;
+      invoice.totalVat = totals.totalVat;
+      invoice.totalItemDiscount = totals.totalItemDiscount;
+      invoice.overallDiscountType = totals.overallDiscountType;
+      invoice.overallDiscountValue = totals.overallDiscountValue;
+      invoice.overallDiscountAmount = totals.overallDiscountAmount;
+      invoice.grandTotal = totals.grandTotal;
+      invoice.withoutVat = totals.withoutVat;
     }
 
     if (customerId) {
-      const customer = await Customer.findOne({ _id: customerId, ...ownerFilter });
-      if (customer) {
-        invoice.customerId = customer._id;
-        invoice.customerName = customer.name;
-        invoice.customerEmail = customer.email;
-        invoice.customerPhone = customer.phone;
-        invoice.customerAddress = customer.address;
-        invoice.customerGstin = customer.gstin;
+      const customer = await sharedCustomerService.getById(customerId, req, {
+        branchMode: "all",
+      });
+      if (!customer) {
+        return sendError(res, { status: 404, message: "Customer not found" });
       }
+      const customerSnapshot = sharedCustomerService.buildSnapshot(customer);
+
+      invoice.customerId = customerSnapshot.customerId;
+      invoice.customerName = customerSnapshot.customerName;
+      invoice.customerEmail = customerSnapshot.customerEmail;
+      invoice.customerPhone = customerSnapshot.customerPhone;
+      invoice.customerAddress = customerSnapshot.customerAddress;
+      invoice.customerGstin = customerSnapshot.customerGstin;
     }
 
-    if (withoutVat !== undefined) invoice.withoutVat = withoutVat;
     if (dueDate) invoice.dueDate = new Date(dueDate);
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
     if (notes !== undefined) invoice.notes = notes;
     if (status) invoice.status = status;
-    if (overallDiscountType) invoice.overallDiscountType = overallDiscountType;
-    if (overallDiscountValue !== undefined) invoice.overallDiscountValue = overallDiscountValue;
 
     await invoice.save();
     return sendSuccess(res, { data: invoice, message: "Invoice updated" });
@@ -324,13 +260,8 @@ export const updateInvoice = async (req, res) => {
 export const updateInvoiceStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status } = req.validated?.body ?? req.body;
     const ownerFilter = buildTenantFilter(req);
-
-    const validStatuses = ["draft", "sent", "paid", "overdue", "cancelled"];
-    if (!validStatuses.includes(status)) {
-      return sendError(res, { status: 400, message: "Invalid status" });
-    }
 
     const invoice = await Invoice.findOne({ _id: id, ...ownerFilter });
     if (!invoice) {

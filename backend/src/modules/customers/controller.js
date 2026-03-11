@@ -1,12 +1,14 @@
-import Customer from "./model.js";
-import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
-import { buildTenantFilter, mergeTenantFilter } from "../../core/utils/tenant.js";
+import { sharedCustomerService } from "../../shared/customers/service.js";
+
+const CUSTOMER_SCOPE_OPTIONS = {
+  branchMode: "all",
+  defaultToCurrentBranch: false,
+};
 
 export const getCustomers = async (req, res) => {
   try {
-    const ownerFilter = buildTenantFilter(req);
-    const customers = await Customer.find(ownerFilter).sort({ createdAt: -1 });
+    const customers = await sharedCustomerService.list(req, CUSTOMER_SCOPE_OPTIONS);
     return sendSuccess(res, { data: customers });
   } catch (error) {
     console.error(error);
@@ -17,7 +19,11 @@ export const getCustomers = async (req, res) => {
 export const getCustomer = async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = await Customer.findOne(mergeTenantFilter(req, { _id: id }));
+    const customer = await sharedCustomerService.getById(
+      id,
+      req,
+      CUSTOMER_SCOPE_OPTIONS
+    );
     if (!customer) {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
@@ -30,19 +36,14 @@ export const getCustomer = async (req, res) => {
 
 export const createCustomer = async (req, res) => {
   try {
-    const userId = req.userId;
-    const { name, email, phone, company, address, gstin, notes } = req.body;
-
-    if (!name) {
-      return sendError(res, { status: 400, message: "Customer name is required" });
-    }
-
-    const customer = new Customer({
-      name, email, phone, company, address, gstin, notes, userId,
-      orgId: req.orgId,
-    });
-
-    await customer.save();
+    const customer = await sharedCustomerService.create(
+      req.validated?.body ?? req.body,
+      req,
+      {
+        ...CUSTOMER_SCOPE_OPTIONS,
+        source: "backoffice",
+      }
+    );
     return sendCreated(res, customer, "Customer created");
   } catch (error) {
     console.error(error);
@@ -52,28 +53,18 @@ export const createCustomer = async (req, res) => {
 
 export const updateCustomer = async (req, res) => {
   try {
-    const userId = req.userId;
     const { id } = req.params;
-    const updates = pick(req.body, [
-      "name",
-      "email",
-      "phone",
-      "company",
-      "address",
-      "gstin",
-      "notes",
-    ]);
-    const ownerFilter = buildTenantFilter(req);
+    const customer = await sharedCustomerService.update(
+      id,
+      req.validated?.body ?? req.body,
+      req,
+      CUSTOMER_SCOPE_OPTIONS
+    );
 
-    if (Object.keys(updates).length === 0) {
+    if (customer === undefined) {
       return sendError(res, { status: 400, message: "No valid fields to update" });
     }
 
-    const customer = await Customer.findOneAndUpdate(
-      { _id: id, ...ownerFilter },
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
     if (!customer) {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
@@ -88,14 +79,19 @@ export const updateCustomer = async (req, res) => {
 export const deleteCustomer = async (req, res) => {
   try {
     const { id } = req.params;
-    const ownerFilter = buildTenantFilter(req);
-
-    const customer = await Customer.findOneAndDelete({ _id: id, ...ownerFilter });
+    const customer = await sharedCustomerService.softDelete(
+      id,
+      req,
+      CUSTOMER_SCOPE_OPTIONS
+    );
     if (!customer) {
       return sendError(res, { status: 404, message: "Customer not found" });
     }
 
-    return sendSuccess(res, { message: "Customer deleted" });
+    return sendSuccess(res, {
+      data: customer,
+      message: "Customer archived",
+    });
   } catch (error) {
     console.error(error);
     return sendError(res, { status: 500, message: "Server error" });
@@ -104,23 +100,7 @@ export const deleteCustomer = async (req, res) => {
 
 export const searchCustomers = async (req, res) => {
   try {
-    const ownerFilter = buildTenantFilter(req);
-    const { q } = req.query;
-
-    if (!q || q.length < 2) {
-      return sendSuccess(res, { data: [] });
-    }
-
-    const customers = await Customer.find({
-      ...ownerFilter,
-      $or: [
-        { name: { $regex: q, $options: "i" } },
-        { email: { $regex: q, $options: "i" } },
-        { company: { $regex: q, $options: "i" } },
-        { phone: { $regex: q, $options: "i" } },
-      ],
-    }).limit(10);
-
+    const customers = await sharedCustomerService.search(req, CUSTOMER_SCOPE_OPTIONS);
     return sendSuccess(res, { data: customers });
   } catch (error) {
     console.error(error);

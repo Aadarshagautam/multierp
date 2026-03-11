@@ -7,7 +7,7 @@ import {
 import asyncHandler from "../asyncHandler.js";
 
 export const createProduct = asyncHandler(async (req, res) => {
-  const product = await productService.create(req.validated, req);
+  const product = await productService.create(req.validated?.body ?? req.body, req);
   return sendCreated(res, product, "Product created");
 });
 
@@ -23,7 +23,11 @@ export const getProduct = asyncHandler(async (req, res) => {
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
-  const product = await productService.update(req.params.id, req.validated, req);
+  const product = await productService.update(
+    req.params.id,
+    req.validated?.body ?? req.body,
+    req
+  );
   if (!product) return sendError(res, { status: 404, message: "Product not found" });
   return sendSuccess(res, { data: product, message: "Product updated" });
 });

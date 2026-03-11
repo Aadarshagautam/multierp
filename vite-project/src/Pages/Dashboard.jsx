@@ -111,7 +111,7 @@ const getRoleExperience = (role, businessType, businessMeta) => {
 }
 
 const Dashboard = () => {
-  const { currentOrgName, orgBusinessType, userData, userRole } = useContext(AppContext)
+  const { currentOrgName, orgBusinessType, userData, userRole, hasPermission } = useContext(AppContext)
   const [loading, setLoading] = useState(true)
   const [overview, setOverview] = useState({
     sales: {},
@@ -131,9 +131,9 @@ const Dashboard = () => {
   const peoplePath = isShop || isLegacyWorkspace ? '/customers' : '/pos/customers'
   const peopleLabel = isRestaurant ? 'Guests' : businessType === 'cafe' ? 'Regulars' : 'Customer base'
   const roleExperience = getRoleExperience(userRole, businessType, businessMeta)
-  const showFinance = isLegacyWorkspace
-  const showInvoices = isLegacyWorkspace || isShop
-  const showCrm = isLegacyWorkspace
+  const showFinance = isLegacyWorkspace && hasPermission('accounting.read')
+  const showInvoices = (isLegacyWorkspace || isShop) && hasPermission('invoices.read')
+  const showCrm = isLegacyWorkspace && hasPermission('crm.read')
   const todayFocusCount = (overview.leads?.byStage?.proposal?.count || 0) + (overview.leads?.byStage?.negotiation?.count || 0)
   const headline =
     businessType === 'restaurant'

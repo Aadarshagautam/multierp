@@ -1,6 +1,7 @@
 import Inventory, { InventoryMovement } from "./model.js";
 import { buildTenantFilter } from "../../core/utils/tenant.js";
 import { getEffectiveReceivedQty } from "../purchases/utils.js";
+import { syncProductFromInventoryItem } from "../../shared/products/service.js";
 
 export const normalizeInventoryName = (value = "") => value.trim().toLowerCase();
 
@@ -75,6 +76,7 @@ export const adjustInventoryQuantity = async ({
         lowStockAlert: 10,
         vatRate: 0,
         sku: "",
+        barcode: "",
       }],
       { session }
     );
@@ -98,6 +100,32 @@ export const adjustInventoryQuantity = async ({
       item.normalizedName = normalizeInventoryName(item.productName);
     }
 
+    await item.save({ session });
+  }
+
+  const syncedProduct = await syncProductFromInventoryItem({
+    inventoryItem: {
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      costPrice: item.costPrice,
+      sellingPrice: item.sellingPrice,
+      category: item.category,
+      lowStockAlert: item.lowStockAlert,
+      vatRate: item.vatRate,
+      sku: item.sku,
+      barcode: item.barcode,
+    },
+    context: req,
+    productId: item.productId,
+    session,
+  });
+
+  if (
+    syncedProduct &&
+    (!item.productId || item.productId.toString() !== syncedProduct._id.toString())
+  ) {
+    item.productId = syncedProduct._id;
     await item.save({ session });
   }
 

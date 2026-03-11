@@ -1,8 +1,9 @@
 import React, { useContext } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CheckSquare, LayoutDashboard, StickyNote } from 'lucide-react'
+import { ArrowRight, CheckSquare, LayoutDashboard, Settings, StickyNote } from 'lucide-react'
 import AppContext from '../context/app-context.js'
 import { getAppsForBusiness, getBusinessMeta } from '../config/businessConfigs'
+import { EmptyCard, PageHeader, SectionCard, WorkspacePage } from './ui/ErpPrimitives.jsx'
 
 const moduleTone = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -38,59 +39,72 @@ const AppSwitcher = () => {
   const visibleTools = workspaceTools.filter(tool => !tool.permission || hasPermission(tool.permission))
 
   return (
-    <div className="page-shell">
+    <WorkspacePage>
+      <PageHeader
+        eyebrow="Work Areas"
+        title={currentOrgName || 'My Business'}
+        description={businessMeta.launcherDescription}
+        badges={[businessMeta.productName, 'Nepal-ready operations']}
+        actions={
+          <Link to="/dashboard" className="btn-secondary">
+            Back to command center
+          </Link>
+        }
+      />
+
       <div className="grid gap-6 xl:grid-cols-[1.45fr,0.9fr]">
-        <section className="panel p-6 sm:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="section-kicker">Work Areas</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{currentOrgName || 'My Business'}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{businessMeta.launcherDescription}</p>
+        <SectionCard
+          eyebrow="Primary Areas"
+          title="Daily work should stay inside a few clear modules."
+          description="Open the area that matches how this business runs today. Keep support tools separate from billing and stock work."
+        >
+          {visibleModules.length === 0 ? (
+            <EmptyCard
+              icon={LayoutDashboard}
+              title="No work areas available"
+              message="This user does not have access to any modules yet. Update workspace permissions first."
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {visibleModules.map(module => {
+                const Icon = module.icon
+                const tone = moduleTone[module.accent] || moduleTone.slate
+                const visibleMenu = module.menu.filter(item => !item.permission || hasPermission(item.permission))
+
+                return (
+                  <div key={module.id} className="group rounded-3xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+                    <div className={`inline-flex rounded-2xl border px-3 py-3 ${tone}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h2 className="mt-4 text-lg font-semibold text-slate-900">{module.name}</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {visibleMenu.slice(0, 3).map(item => (
+                        <span key={item.path} className="erp-chip">
+                          {item.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-5 flex items-center justify-between">
+                      <Link to={module.basePath} className="btn-primary">
+                        Open {module.name}
+                      </Link>
+                      <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <Link to="/dashboard" className="text-sm font-semibold text-slate-900">
-              Back to command center
-            </Link>
-          </div>
+          )}
+        </SectionCard>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {visibleModules.map(module => {
-              const Icon = module.icon
-              const tone = moduleTone[module.accent] || moduleTone.slate
-              const visibleMenu = module.menu.filter(item => !item.permission || hasPermission(item.permission))
-
-              return (
-                <Link
-                  key={module.id}
-                  to={module.basePath}
-                  className="group rounded-3xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                >
-                  <div className={`inline-flex rounded-2xl border px-3 py-3 ${tone}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h2 className="mt-4 text-lg font-semibold text-slate-900">{module.name}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {visibleMenu.slice(0, 3).map(item => (
-                      <span key={item.path} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                        {item.label}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    Open area
-                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        </section>
-
-        <aside className="space-y-6">
-          <section className="panel p-6">
-            <p className="section-kicker">Your Software</p>
-            <h2 className="mt-2 section-heading">The business package active on your workspace.</h2>
-            <div className={`mt-5 rounded-3xl border p-5 ${softwareTone[businessType] || softwareTone.general}`}>
+        <aside className="erp-stack">
+          <SectionCard
+            eyebrow="Your Software"
+            title="The active business package on this workspace."
+            description="Keep the product setup aligned with the business you are operating today."
+          >
+            <div className={`rounded-3xl border p-5 ${softwareTone[businessType] || softwareTone.general}`}>
               <div className="flex items-center gap-4">
                 <div className="rounded-2xl border border-current/20 bg-white/50 p-3">
                   <LayoutDashboard className="h-5 w-5" />
@@ -101,25 +115,31 @@ const AppSwitcher = () => {
                 </div>
               </div>
             </div>
-            <Link
-              to="/settings"
-              className="mt-4 flex items-center justify-between rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm transition hover:border-slate-300 hover:shadow-sm"
-            >
-              <span className="font-semibold text-slate-900">Change business package</span>
-              <ArrowRight className="h-4 w-4 text-slate-400" />
-            </Link>
+            <div className="mt-4 grid gap-3">
+              <Link to="/settings" className="btn-secondary justify-between">
+                <span>Change business package</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              {showSettings && (
+                <Link to={settingsApp.basePath} className="btn-secondary justify-between">
+                  <span>Open settings</span>
+                  <Settings className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
             {businessType === 'general' && (
-              <p className="mt-4 rounded-3xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-700">
-                Legacy Workspace is only kept here for older accounts. Restaurant, Cafe, or Shop is the cleaner Nepal-first setup.
-              </p>
+              <div className="erp-subtle mt-4 text-sm leading-6 text-stone-700">
+                Legacy Workspace is only kept for older accounts. Restaurant, Cafe, or Shop gives a cleaner Nepal-first workflow.
+              </div>
             )}
-          </section>
+          </SectionCard>
 
           {visibleTools.length > 0 && (
-            <section className="panel p-6">
-              <p className="section-kicker">Workspace Tools</p>
-              <h2 className="mt-2 section-heading">Support work stays available, but out of the main sales flow.</h2>
-              <div className="mt-6 space-y-4">
+            <SectionCard
+              eyebrow="Support Tools"
+              title="Keep notes and tasks close, but out of the main sales path."
+            >
+              <div className="space-y-4">
                 {visibleTools.map(tool => {
                   const Icon = tool.icon
                   return (
@@ -142,18 +162,11 @@ const AppSwitcher = () => {
                   )
                 })}
               </div>
-            </section>
-          )}
-
-          {showSettings && (
-            <Link to={settingsApp.basePath} className="block rounded-3xl border border-slate-200 bg-slate-900 p-6 text-white transition hover:bg-slate-800">
-              <p className="text-sm font-semibold">Company settings</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">Control team access, software plan, and workspace preferences.</p>
-            </Link>
+            </SectionCard>
           )}
         </aside>
       </div>
-    </div>
+    </WorkspacePage>
   )
 }
 

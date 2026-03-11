@@ -9,6 +9,7 @@ export const POS_PAYMENT_METHODS = [
   { key: "esewa", label: "eSewa" },
   { key: "khalti", label: "Khalti" },
   { key: "credit", label: "Credit" },
+  { key: "mixed", label: "Split" },
 ];
 
 export const INVOICE_PAYMENT_METHODS = [

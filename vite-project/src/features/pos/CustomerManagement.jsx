@@ -15,6 +15,17 @@ const TIER_CONFIG = {
 
 const emptyForm = { name: '', phone: '', email: '', address: '', birthday: '', notes: '' }
 
+const formatCustomerAddress = customer => {
+  if (!customer) return ''
+  if (customer.addressText) return customer.addressText
+  if (typeof customer.address === 'string') return customer.address
+  if (!customer.address) return ''
+
+  return [customer.address.street, customer.address.city, customer.address.state, customer.address.pincode]
+    .filter(Boolean)
+    .join(', ')
+}
+
 export default function CustomerManagement() {
   const { orgBusinessType } = useContext(AppContext)
   const qc = useQueryClient()
@@ -78,7 +89,7 @@ export default function CustomerManagement() {
       name: customer.name,
       phone: customer.phone || '',
       email: customer.email || '',
-      address: customer.address || '',
+      address: formatCustomerAddress(customer),
       birthday: customer.birthday || '',
       notes: customer.notes || '',
     })
@@ -174,7 +185,7 @@ export default function CustomerManagement() {
                       <tr key={customer._id} className="transition-colors hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <p className="font-medium text-gray-900">{customer.name}</p>
-                          <p className="text-xs text-gray-400">{customer.email || customer.address || '-'}</p>
+                          <p className="text-xs text-gray-400">{customer.email || formatCustomerAddress(customer) || '-'}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-600">{customer.phone || '-'}</td>
                         <td className="px-4 py-3 text-center">

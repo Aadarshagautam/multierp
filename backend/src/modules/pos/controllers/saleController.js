@@ -7,8 +7,9 @@ import {
 import asyncHandler from "../asyncHandler.js";
 
 export const createSale = asyncHandler(async (req, res) => {
-  const sale = await saleService.create(req.validated, req);
-  return sendCreated(res, sale, "Sale completed");
+  const sale = await saleService.create(req.validated?.body ?? req.body, req);
+  const detailedSale = await saleService.getById(sale._id, req);
+  return sendCreated(res, detailedSale || sale, "Sale completed");
 });
 
 export const getSales = asyncHandler(async (req, res) => {
@@ -33,10 +34,7 @@ export const getSaleStats = asyncHandler(async (req, res) => {
 });
 
 export const updateOrderStatus = asyncHandler(async (req, res) => {
-  const { orderStatus } = req.body;
-  const valid = ["pending", "preparing", "ready", "served", "completed", "cancelled"];
-  if (!valid.includes(orderStatus))
-    return sendError(res, { status: 400, message: "Invalid order status" });
+  const { orderStatus } = req.validated?.body ?? req.body;
   const sale = await saleService.updateOrderStatus(req.params.id, orderStatus, req);
   if (!sale) return sendError(res, { status: 404, message: "Sale not found" });
   return sendSuccess(res, { data: sale, message: "Order status updated" });

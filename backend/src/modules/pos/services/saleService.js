@@ -1,34 +1,103 @@
 import mongoose from "mongoose";
 import PosSale from "../models/Sale.js";
-import PosProduct from "../models/Product.js";
-import PosCustomer from "../models/Customer.js";
+import PosProduct from "../../../shared/products/model.js";
 import PosTable from "../models/Table.js";
 import Shift from "../models/Shift.js";
-import StockMovement from "../models/StockMovement.js";
+import { sharedCustomerService } from "../../../shared/customers/service.js";
+import { DEFAULT_WALK_IN_NAME } from "../../../shared/customers/constants.js";
+import { buildAddressText } from "../../../shared/customers/utils.js";
+import {
+  calculateSaleLineItem,
+  calculateSaleTotals,
+  getNextPosSaleNumber,
+} from "../../../shared/sales/index.js";
+import {
+  calculatePaymentSummary,
+  createDomainError,
+} from "../../../shared/payments/index.js";
+import {
+  createRefundStockMovement,
+  createSaleStockMovement,
+} from "../../../shared/stock-movements/index.js";
 import { buildPosScopeFilter, getPosBranchId } from "../utils/scope.js";
 import {
   consumeRecipeStock,
   restoreRecipeStock,
 } from "../../inventory/stockService.js";
-import {
-  buildPosInvoiceNumber,
-  buildPosInvoiceSequenceKey,
-  getNextSequence,
-} from "../../../core/utils/sequence.js";
 
-// Loyalty tier thresholds (total spent in Rs.)
-const LOYALTY_POINTS_RATE = 1;          // 1 point per Rs. spent
-const LOYALTY_POINT_VALUE = 0.5;        // 1 point = Rs. 0.5 discount
-const TIER_THRESHOLDS = { silver: 5000, gold: 20000, platinum: 50000 };
+const usesRecipeStock = (product) =>
+  Array.isArray(product?.recipe) && product.recipe.length > 0;
 
-function computeTier(totalSpent) {
-  if (totalSpent >= TIER_THRESHOLDS.platinum) return "platinum";
-  if (totalSpent >= TIER_THRESHOLDS.gold) return "gold";
-  if (totalSpent >= TIER_THRESHOLDS.silver) return "silver";
-  return "bronze";
-}
+const getWalkInSnapshot = () => ({
+  customerId: null,
+  customerName: DEFAULT_WALK_IN_NAME,
+  customerPhone: "",
+  customerEmail: "",
+  customerAddress: {},
+  customerGstin: "",
+  customerType: "walk_in",
+  customerBranchId: null,
+});
 
-const usesRecipeStock = (product) => Array.isArray(product?.recipe) && product.recipe.length > 0;
+const ensureProductCanBeSold = ({
+  product,
+  item,
+  allowNegative,
+}) => {
+  if (!product) {
+    throw createDomainError(`Product not found: ${item.productId}`, 404);
+  }
+  if (!product.isActive) {
+    throw createDomainError(`Product is inactive: ${product.name}`);
+  }
+  if (!product.isAvailable) {
+    throw createDomainError(`"${product.name}" is currently not available`);
+  }
+
+  if (
+    product.trackStock !== false &&
+    !usesRecipeStock(product) &&
+    !allowNegative &&
+    (product.stockQty || 0) < item.qty
+  ) {
+    throw createDomainError(
+      `Insufficient stock for "${product.name}". Available: ${product.stockQty}, Requested: ${item.qty}`
+    );
+  }
+};
+
+const buildSaleCustomerSnapshot = (customer) => {
+  const snapshot = customer
+    ? sharedCustomerService.buildSnapshot(customer)
+    : getWalkInSnapshot();
+
+  return {
+    customerId: snapshot.customerId || null,
+    customerName: snapshot.customerName || DEFAULT_WALK_IN_NAME,
+    customerPhone: snapshot.customerPhone || "",
+    customerEmail: snapshot.customerEmail || "",
+    customerAddressText: buildAddressText(snapshot.customerAddress || {}),
+    customerType: snapshot.customerType || "walk_in",
+  };
+};
+
+const validateSaleSettlement = ({
+  customer,
+  customerId,
+  paymentSummary,
+}) => {
+  if (paymentSummary.dueAmount > 0 && !customer) {
+    throw createDomainError(
+      customerId
+        ? "Selected customer was not found for this branch."
+        : "A customer account is required to leave an unpaid balance."
+    );
+  }
+
+  if (paymentSummary.dueAmount > 0 && !["credit", "mixed"].includes(paymentSummary.paymentMode)) {
+    throw createDomainError("Use credit or mixed payment to keep an unpaid balance.");
+  }
+};
 
 export const saleService = {
   async create(data, req) {
@@ -39,215 +108,202 @@ export const saleService = {
       const scopeFilter = buildPosScopeFilter(req);
       const branchId = getPosBranchId(req);
       const allowNegative = process.env.ALLOW_NEGATIVE_STOCK === "true";
-      const lineItems = [];
-      let subTotal = 0;
-      let taxTotal = 0;
       const currentShift = await Shift.findOne({ ...scopeFilter, status: "open" })
         .sort({ createdAt: -1 })
         .session(session);
 
       if (!currentShift) {
-        throw new Error("Open a shift before billing a sale.");
+        throw createDomainError("Open a shift before billing a sale.");
       }
 
       if (data.paymentMethod === "credit" && !data.customerId) {
-        throw new Error("Credit billing requires a selected customer account.");
+        throw createDomainError("Credit billing requires a selected customer account.");
       }
 
       const customer = data.customerId
-        ? await PosCustomer.findOne({ _id: data.customerId, ...scopeFilter }).session(session)
+        ? await sharedCustomerService.getById(data.customerId, req, {
+            branchMode: "current_or_global",
+            session,
+          })
         : null;
 
       if (data.customerId && !customer) {
-        throw new Error("Selected customer was not found for this branch.");
+        throw createDomainError("Selected customer was not found for this branch.", 404);
       }
 
       const pointsRedeemed = data.loyaltyPointsRedeemed || 0;
       if (pointsRedeemed > 0 && !customer) {
-        throw new Error("Select a customer before redeeming loyalty points.");
+        throw createDomainError("Select a customer before redeeming loyalty points.");
       }
       if (pointsRedeemed > (customer?.loyaltyPoints || 0)) {
-        throw new Error("The selected customer does not have enough loyalty points.");
+        throw createDomainError("The selected customer does not have enough loyalty points.");
       }
 
+      const preparedItems = [];
+      const stockOperations = [];
+
       for (const item of data.items) {
-        const product = await PosProduct.findOne({ _id: item.productId, ...scopeFilter }).session(session);
-        if (!product) throw new Error(`Product not found: ${item.productId}`);
-        if (!product.isActive) throw new Error(`Product is inactive: ${product.name}`);
-        if (!product.isAvailable) throw new Error(`"${product.name}" is currently not available`);
-        const recipeDrivenStock = usesRecipeStock(product);
+        const product = await PosProduct.findOne({ _id: item.productId, ...scopeFilter }).session(
+          session
+        );
+        ensureProductCanBeSold({ product, item, allowNegative });
 
-        if (!recipeDrivenStock && !allowNegative && product.stockQty < item.qty) {
-          throw new Error(
-            `Insufficient stock for "${product.name}". Available: ${product.stockQty}, Requested: ${item.qty}`
-          );
-        }
-
-        // Modifier price addition
-        const modifierTotal = (item.modifiers || []).reduce((s, m) => s + (m.price || 0), 0);
-        const price = (item.price ?? product.sellingPrice) + modifierTotal;
-        const lineDiscount = item.discount || 0;
-        const taxableAmount = price * item.qty - lineDiscount;
-        const lineTax = (taxableAmount * product.taxRate) / 100;
-        const lineTotal = taxableAmount + lineTax;
-
-        lineItems.push({
-          productId: product._id,
-          nameSnapshot: product.name,
-          skuSnapshot: product.sku || "",
-          menuCategory: product.menuCategory || "",
-          qty: item.qty,
-          price,
-          discount: lineDiscount,
-          tax: Math.round(lineTax * 100) / 100,
-          lineTotal: Math.round(lineTotal * 100) / 100,
-          modifiers: item.modifiers || [],
-          notes: item.notes || "",
-          status: data.orderType === "dine-in" ? "pending" : "completed",
+        const lineItem = calculateSaleLineItem({
+          item,
+          product,
+          orderType: data.orderType || "takeaway",
         });
 
-        subTotal += price * item.qty;
-        taxTotal += lineTax;
+        preparedItems.push(lineItem);
+        stockOperations.push({
+          product,
+          lineItem,
+          recipeDrivenStock: usesRecipeStock(product),
+        });
+      }
+
+      const totals = calculateSaleTotals({
+        items: preparedItems,
+        overallDiscount: data.overallDiscount || 0,
+        loyaltyPointsRedeemed: pointsRedeemed,
+      });
+
+      const paymentSummary = calculatePaymentSummary({
+        paymentMethod: data.paymentMethod || "cash",
+        paidAmount: data.paidAmount ?? totals.grandTotal,
+        payments: data.payments || [],
+        grandTotal: totals.grandTotal,
+      });
+
+      validateSaleSettlement({
+        customer,
+        customerId: data.customerId,
+        paymentSummary,
+      });
+
+      const orderStatus =
+        (data.orderType || "takeaway") === "dine-in" ? "pending" : "completed";
+      const numbering = await getNextPosSaleNumber(
+        {
+          orgId: req.orgId,
+          userId: req.userId,
+          branchId,
+        },
+        { session }
+      );
+      const customerSnapshot = buildSaleCustomerSnapshot(customer);
+
+      const [sale] = await PosSale.create(
+        [
+          {
+            userId: req.userId,
+            orgId: req.orgId || null,
+            branchId,
+            invoiceNo: numbering.invoiceNo,
+            items: totals.items,
+            customerId: customerSnapshot.customerId,
+            customerName: customerSnapshot.customerName,
+            customerPhone: customerSnapshot.customerPhone,
+            customerEmail: customerSnapshot.customerEmail,
+            customerAddressText: customerSnapshot.customerAddressText,
+            customerType: customerSnapshot.customerType,
+            subTotal: totals.subtotal,
+            itemDiscountTotal: totals.itemDiscountTotal,
+            overallDiscount: totals.overallDiscountAmount,
+            loyaltyDiscount: totals.loyaltyDiscount,
+            discountTotal: totals.discountTotal,
+            taxTotal: totals.taxTotal,
+            grandTotal: totals.grandTotal,
+            payments: paymentSummary.payments,
+            paymentMethod: paymentSummary.paymentMethod,
+            paymentMode: paymentSummary.paymentMode,
+            receivedAmount: paymentSummary.receivedAmount,
+            paidAmount: paymentSummary.paidAmount,
+            dueAmount: paymentSummary.dueAmount,
+            changeAmount: paymentSummary.changeAmount,
+            soldBy: req.userId,
+            status: paymentSummary.status,
+            notes: data.notes || "",
+            orderType: data.orderType || "takeaway",
+            tableId: data.tableId || null,
+            tableNumber: null,
+            deliveryAddress: data.deliveryAddress || "",
+            orderStatus,
+            shiftId: currentShift?._id || null,
+            loyaltyPointsEarned: totals.pointsEarned,
+            loyaltyPointsRedeemed: pointsRedeemed,
+          },
+        ],
+        { session }
+      );
+
+      for (const stockOperation of stockOperations) {
+        const { product, lineItem, recipeDrivenStock } = stockOperation;
+
+        if (product.trackStock === false || lineItem.productTypeSnapshot === "service") {
+          continue;
+        }
 
         if (recipeDrivenStock) {
           await consumeRecipeStock({
             product,
-            saleQty: item.qty,
+            saleQty: lineItem.qty,
             req,
             session,
             allowNegative,
           });
-        } else {
-          await PosProduct.findByIdAndUpdate(product._id, { $inc: { stockQty: -item.qty } }, { session });
-          await StockMovement.create(
-            [{
-              orgId: req.orgId || null,
-              branchId,
-              productId: product._id,
-              type: "OUT",
-              qty: item.qty,
-              reason: "Sale",
-              createdBy: req.userId,
-            }],
-            { session }
-          );
+          continue;
         }
-      }
 
-      // Totals
-      const overallDiscount = data.overallDiscount || 0;
-      const discountTotal = lineItems.reduce((s, i) => s + i.discount, 0) + overallDiscount;
-      taxTotal = Math.round(taxTotal * 100) / 100;
-      subTotal = Math.round(subTotal * 100) / 100;
-
-      // Loyalty points redemption
-      const loyaltyDiscount = Math.round(pointsRedeemed * LOYALTY_POINT_VALUE * 100) / 100;
-
-      const grandTotal = Math.max(
-        0,
-        Math.round((subTotal - overallDiscount - loyaltyDiscount + taxTotal) * 100) / 100
-      );
-      const paidAmount = data.paidAmount ?? grandTotal;
-      const dueAmount = Math.round((grandTotal - paidAmount) * 100) / 100;
-
-      if (dueAmount > 0 && !customer) {
-        throw new Error("A customer account is required to leave an unpaid balance.");
-      }
-      if (dueAmount > 0 && !["credit", "mixed"].includes(data.paymentMethod || "cash")) {
-        throw new Error("Use credit or mixed payment to keep an unpaid balance.");
-      }
-
-      let payStatus = "paid";
-      if (dueAmount > 0 && paidAmount > 0) payStatus = "partial";
-      if (paidAmount === 0) payStatus = "due";
-
-      const orderStatus = data.orderType === "dine-in" ? "pending" : "completed";
-      const pointsEarned = Math.floor(grandTotal * LOYALTY_POINTS_RATE);
-      const invoiceSeq = await getNextSequence(
-        buildPosInvoiceSequenceKey({
-          orgId: req.orgId,
-          userId: req.userId,
-          branchId,
-        }),
-        { session }
-      );
-
-      const [sale] = await PosSale.create(
-        [{
-          userId: req.userId,
-          orgId: req.orgId || null,
-          branchId,
-          invoiceNo: buildPosInvoiceNumber({
-            orgId: req.orgId,
-            userId: req.userId,
-            branchId,
-            seq: invoiceSeq,
-          }),
-          items: lineItems,
-          subTotal,
-          discountTotal: discountTotal + loyaltyDiscount,
-          taxTotal,
-          grandTotal,
-          paymentMethod: data.paymentMethod || "cash",
-          paidAmount,
-          dueAmount,
-          customerId: data.customerId || null,
-          soldBy: req.userId,
-          status: payStatus,
-          notes: data.notes || "",
-          orderType: data.orderType || "takeaway",
-          tableId: data.tableId || null,
-          tableNumber: null,
-          deliveryAddress: data.deliveryAddress || "",
-          orderStatus,
-          shiftId: currentShift?._id || null,
-          loyaltyPointsEarned: pointsEarned,
-          loyaltyPointsRedeemed: pointsRedeemed,
-        }],
-        { session }
-      );
-
-      // Update table status if dine-in
-      if (data.orderType === "dine-in" && data.tableId) {
-        const table = await PosTable.findOne({ _id: data.tableId, ...scopeFilter }).session(session);
-        if (table) {
-          sale.tableNumber = table.number;
-          await PosTable.findOneAndUpdate(
-            { _id: data.tableId, ...scopeFilter },
-            { $set: { status: "occupied", currentOrderId: sale._id } },
-            { session }
-          );
-        } else {
-          throw new Error("Selected table was not found for this branch");
-        }
-      }
-
-      // Customer: credit, loyalty, stats
-      if (data.customerId) {
-        const customerUpdate = {
-          $inc: {
-            totalSpent: grandTotal,
-            visitCount: 1,
-            loyaltyPoints: pointsEarned - pointsRedeemed,
-            ...(dueAmount > 0 && data.paymentMethod === "credit" ? { creditBalance: dueAmount } : {}),
-          },
-        };
-        const updatedCustomer = await PosCustomer.findOneAndUpdate(
-          { _id: data.customerId, ...scopeFilter },
-          customerUpdate,
-          { session, new: true }
+        await PosProduct.findByIdAndUpdate(
+          product._id,
+          { $inc: { stockQty: -lineItem.qty } },
+          { session }
         );
-        if (updatedCustomer) {
-          const newTier = computeTier(updatedCustomer.totalSpent);
-          if (newTier !== updatedCustomer.tier) {
-            await PosCustomer.findOneAndUpdate(
-              { _id: data.customerId, ...scopeFilter },
-              { $set: { tier: newTier } },
-              { session }
-            );
-          }
-        } else {
-          throw new Error("Selected customer was not found for this branch");
+        await createSaleStockMovement({
+          productId: product._id,
+          qty: lineItem.qty,
+          saleId: sale._id,
+          invoiceNo: sale.invoiceNo,
+          req,
+          session,
+        });
+      }
+
+      if (data.orderType === "dine-in" && data.tableId) {
+        const table = await PosTable.findOne({ _id: data.tableId, ...scopeFilter }).session(
+          session
+        );
+        if (!table) {
+          throw createDomainError("Selected table was not found for this branch", 404);
+        }
+
+        sale.tableNumber = table.number;
+        await sale.save({ session });
+        await PosTable.findOneAndUpdate(
+          { _id: data.tableId, ...scopeFilter },
+          { $set: { status: "occupied", currentOrderId: sale._id } },
+          { session }
+        );
+      }
+
+      if (data.customerId) {
+        const updatedCustomer = await sharedCustomerService.applySaleMetrics(
+          data.customerId,
+          {
+            totalSpent: totals.grandTotal,
+            visitCount: 1,
+            loyaltyPoints: totals.pointsEarned - pointsRedeemed,
+            creditBalance: paymentSummary.dueAmount,
+            lastSaleAt: new Date(),
+            session,
+          },
+          req,
+          { branchMode: "current_or_global" }
+        );
+
+        if (!updatedCustomer) {
+          throw createDomainError("Selected customer was not found for this branch", 404);
         }
       }
 
@@ -263,7 +319,15 @@ export const saleService = {
 
   async list(req) {
     const filter = { ...buildPosScopeFilter(req) };
-    const { status, customerId, orderType, startDate, endDate, page = 1, limit = 20 } = req.query;
+    const {
+      status,
+      customerId,
+      orderType,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20,
+    } = req.query;
 
     if (status) filter.status = status;
     if (customerId) filter.customerId = customerId;
@@ -291,13 +355,18 @@ export const saleService = {
 
     return {
       sales,
-      pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
     };
   },
 
   async getById(id, req) {
     return PosSale.findOne({ _id: id, ...buildPosScopeFilter(req) })
-      .populate("customerId", "name phone email address loyaltyPoints tier")
+      .populate("customerId", "name phone email address addressText loyaltyPoints tier")
       .populate("soldBy", "username email")
       .populate("tableId", "number name section");
   },
@@ -309,11 +378,11 @@ export const saleService = {
       { $set: { orderStatus } },
       { new: true }
     );
-    // If completed/cancelled, free the table
     if (sale?.tableId && ["completed", "cancelled"].includes(orderStatus)) {
-      await PosTable.findOneAndUpdate({ _id: sale.tableId, ...scopeFilter }, {
-        $set: { status: "available", currentOrderId: null },
-      });
+      await PosTable.findOneAndUpdate(
+        { _id: sale.tableId, ...scopeFilter },
+        { $set: { status: "available", currentOrderId: null } }
+      );
     }
     return sale;
   },
@@ -337,11 +406,21 @@ export const saleService = {
     try {
       const scopeFilter = buildPosScopeFilter(req);
       const sale = await PosSale.findOne({ _id: saleId, ...scopeFilter }).session(session);
-      if (!sale) throw new Error("Sale not found");
-      if (sale.status === "refund") throw new Error("Sale already refunded");
+      if (!sale) throw createDomainError("Sale not found", 404);
+      if (sale.status === "refund") throw createDomainError("Sale already refunded");
 
       for (const item of sale.items) {
-        const product = await PosProduct.findOne({ _id: item.productId, ...scopeFilter }).session(session);
+        if (item.productTypeSnapshot === "service") {
+          continue;
+        }
+
+        const product = await PosProduct.findOne({ _id: item.productId, ...scopeFilter }).session(
+          session
+        );
+
+        if (!product) {
+          throw createDomainError(`Product not found for refund: ${item.nameSnapshot}`, 404);
+        }
 
         if (usesRecipeStock(product)) {
           await restoreRecipeStock({
@@ -356,27 +435,22 @@ export const saleService = {
             { $inc: { stockQty: item.qty } },
             { session }
           );
-          await StockMovement.create(
-            [{
-              orgId: req.orgId || null,
-              branchId: sale.branchId || getPosBranchId(req),
-              productId: item.productId,
-              type: "IN",
-              qty: item.qty,
-              reason: `Refund - ${sale.invoiceNo}`,
-              refSaleId: sale._id,
-              createdBy: req.userId,
-            }],
-            { session }
-          );
+          await createRefundStockMovement({
+            productId: item.productId,
+            qty: item.qty,
+            saleId: sale._id,
+            invoiceNo: sale.invoiceNo,
+            req,
+            session,
+          });
         }
       }
 
       sale.status = "refund";
       sale.orderStatus = "cancelled";
+      sale.refundedAt = new Date();
       await sale.save({ session });
 
-      // Free table
       if (sale.tableId) {
         await PosTable.findOneAndUpdate(
           { _id: sale.tableId, ...scopeFilter },
@@ -385,18 +459,18 @@ export const saleService = {
         );
       }
 
-      // Reverse loyalty + credit
       if (sale.customerId) {
-        await PosCustomer.findOneAndUpdate(
-          { _id: sale.customerId, ...scopeFilter },
+        await sharedCustomerService.applySaleMetrics(
+          sale.customerId,
           {
-            $inc: {
-              totalSpent: -sale.grandTotal,
-              loyaltyPoints: -(sale.loyaltyPointsEarned - sale.loyaltyPointsRedeemed),
-              ...(sale.dueAmount > 0 ? { creditBalance: -sale.dueAmount } : {}),
-            },
+            totalSpent: -sale.grandTotal,
+            visitCount: -1,
+            loyaltyPoints: -(sale.loyaltyPointsEarned - sale.loyaltyPointsRedeemed),
+            creditBalance: sale.dueAmount > 0 ? -sale.dueAmount : 0,
+            session,
           },
-          { session }
+          req,
+          { branchMode: "current_or_global" }
         );
       }
 
@@ -417,32 +491,45 @@ export const saleService = {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Last 7 days for chart
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
-    const [counts, todayCounts, revenue, todayRevenue, hourly, daily, byOrderType] = await Promise.all([
+    const [
+      counts,
+      todayCounts,
+      revenue,
+      todayRevenue,
+      hourly,
+      daily,
+      byOrderType,
+      refundsToday,
+    ] = await Promise.all([
       PosSale.countDocuments(base),
       PosSale.countDocuments({ ...base, createdAt: { $gte: today, $lt: tomorrow } }),
       PosSale.aggregate([{ $match: base }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
-      PosSale.aggregate([{ $match: { ...base, createdAt: { $gte: today, $lt: tomorrow } } }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
-      // Hourly breakdown for today
+      PosSale.aggregate([
+        { $match: { ...base, createdAt: { $gte: today, $lt: tomorrow } } },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } },
+      ]),
       PosSale.aggregate([
         { $match: { ...base, createdAt: { $gte: today, $lt: tomorrow } } },
         { $group: { _id: { $hour: "$createdAt" }, revenue: { $sum: "$grandTotal" }, count: { $count: {} } } },
-        { $sort: { "_id": 1 } },
+        { $sort: { _id: 1 } },
       ]),
-      // Daily for last 7 days
       PosSale.aggregate([
         { $match: { ...base, createdAt: { $gte: sevenDaysAgo } } },
         { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, revenue: { $sum: "$grandTotal" }, count: { $count: {} } } },
-        { $sort: { "_id": 1 } },
+        { $sort: { _id: 1 } },
       ]),
-      // By order type
       PosSale.aggregate([
         { $match: { ...base, createdAt: { $gte: today, $lt: tomorrow } } },
         { $group: { _id: "$orderType", total: { $sum: "$grandTotal" }, count: { $count: {} } } },
       ]),
+      PosSale.countDocuments({
+        ...buildPosScopeFilter(req),
+        status: "refund",
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
     ]);
 
     return {
@@ -450,6 +537,8 @@ export const saleService = {
       todaySales: todayCounts,
       totalRevenue: revenue[0]?.total || 0,
       todayRevenue: todayRevenue[0]?.total || 0,
+      todayAverageSale: todayCounts > 0 ? (todayRevenue[0]?.total || 0) / todayCounts : 0,
+      refundCountToday: refundsToday,
       hourlyChart: hourly,
       dailyChart: daily,
       byOrderType,

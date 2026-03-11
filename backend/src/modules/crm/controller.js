@@ -1,8 +1,8 @@
 import Lead from "./model.js";
-import Customer from "../customers/model.js";
 import { logAudit } from "../../core/utils/auditLogger.js";
 import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
+import { sharedCustomerService } from "../../shared/customers/service.js";
 
 export const getLeads = async (req, res) => {
   try {
@@ -189,16 +189,21 @@ export const convertToCustomer = async (req, res) => {
     }
 
     // Create customer from lead
-    const customer = new Customer({
-      name: lead.name,
-      email: lead.email,
-      phone: lead.phone,
-      company: lead.company,
-      notes: lead.notes,
-      userId,
-      orgId: req.orgId,
-    });
-    await customer.save();
+    const customer = await sharedCustomerService.create(
+      {
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        company: lead.company,
+        notes: lead.notes,
+        customerType: "regular",
+      },
+      req,
+      {
+        branchMode: "all",
+        source: "crm",
+      }
+    );
 
     // Update lead
     lead.customerId = customer._id;

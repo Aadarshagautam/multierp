@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { LoaderCircle } from 'lucide-react'
 import DashboardLayout from './components/DashboardLayout.jsx'
 import PackageRoute from './components/PackageRoute.jsx'
+import PermissionRoute from './components/PermissionRoute.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import StatePanel from './components/StatePanel.jsx'
 
@@ -141,10 +142,54 @@ const App = () => {
           <Route path="/reports" element={<LazyScreen><ReportsPage /></LazyScreen>} />
           <Route path="/purchases" element={<LazyScreen><PurchasePage /></LazyScreen>} />
           <Route path="/customers" element={<LazyScreen><CustomersPage /></LazyScreen>} />
-          <Route path="/invoices" element={<LazyScreen><InvoicesPage /></LazyScreen>} />
-          <Route path="/invoices/new" element={<LazyScreen><InvoiceFormPage /></LazyScreen>} />
-          <Route path="/invoices/:id" element={<LazyScreen><InvoiceDetailPage /></LazyScreen>} />
-          <Route path="/invoices/:id/edit" element={<LazyScreen><InvoiceFormPage /></LazyScreen>} />
+          <Route
+            path="/invoices"
+            element={(
+              <PermissionRoute
+                permission="invoices.read"
+                title="Invoice access is restricted"
+                message="This workspace is available only to roles with invoice access."
+              >
+                <LazyScreen><InvoicesPage /></LazyScreen>
+              </PermissionRoute>
+            )}
+          />
+          <Route
+            path="/invoices/new"
+            element={(
+              <PermissionRoute
+                permission="invoices.create"
+                title="Invoice creation is restricted"
+                message="Your role can open the workspace, but it cannot create new invoices."
+              >
+                <LazyScreen><InvoiceFormPage /></LazyScreen>
+              </PermissionRoute>
+            )}
+          />
+          <Route
+            path="/invoices/:id"
+            element={(
+              <PermissionRoute
+                permission="invoices.read"
+                title="Invoice access is restricted"
+                message="Your role does not have permission to open invoice details."
+              >
+                <LazyScreen><InvoiceDetailPage /></LazyScreen>
+              </PermissionRoute>
+            )}
+          />
+          <Route
+            path="/invoices/:id/edit"
+            element={(
+              <PermissionRoute
+                permission="invoices.update"
+                title="Invoice editing is restricted"
+                message="Your role does not have permission to edit invoice records."
+              >
+                <LazyScreen><InvoiceFormPage /></LazyScreen>
+              </PermissionRoute>
+            )}
+          />
           <Route path="/crm" element={<LazyScreen><CRMPage /></LazyScreen>} />
           <Route path="/crm/leads" element={<Navigate to="/crm" replace />} />
           <Route path="/crm/leads/new" element={<Navigate to="/crm" replace />} />
