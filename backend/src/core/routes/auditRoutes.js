@@ -5,6 +5,6 @@ import { getAuditLogs } from "../controllers/auditController.js";
 
 const router = express.Router();
 
-router.get("/", userAuth, permissionMiddleware("settings.read"), getAuditLogs);
+router.get("/", userAuth, permissionMiddleware("audit.read"), getAuditLogs);
 
 export default router;

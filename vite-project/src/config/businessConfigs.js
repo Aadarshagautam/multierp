@@ -120,13 +120,13 @@ const restaurantConfig = [
     permission: "pos.read",
     menu: [
       { label: "Dashboard", path: "/pos", icon: Monitor, exact: true, permission: "pos.read" },
-      { label: "New Bill", path: "/pos/billing", icon: ShoppingCart, permission: "pos.create" },
-      { label: "Floor Plan", path: "/pos/tables", icon: Table2, permission: "pos.read" },
-      { label: "Kitchen", path: "/pos/kds", icon: ChefHat, permission: "pos.read" },
-      { label: "Menu Items", path: "/pos/products", icon: Package, permission: "pos.read" },
-      { label: "Guests", path: "/pos/customers", icon: Users, permission: "pos.read" },
-      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.read" },
-      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.read" },
+      { label: "New Bill", path: "/pos/billing", icon: ShoppingCart, permission: "pos.sales.create" },
+      { label: "Floor Plan", path: "/pos/tables", icon: Table2, permission: "pos.tables.read" },
+      { label: "Kitchen", path: "/pos/kds", icon: ChefHat, permission: "pos.kitchen.read" },
+      { label: "Menu Items", path: "/pos/products", icon: Package, permission: "pos.products.read" },
+      { label: "Guests", path: "/pos/customers", icon: Users, permission: "pos.customers.read" },
+      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.shifts.read" },
+      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.sales.read" },
     ],
   },
   {
@@ -160,11 +160,11 @@ const cafeConfig = [
     permission: "pos.read",
     menu: [
       { label: "Dashboard", path: "/pos", icon: Monitor, exact: true, permission: "pos.read" },
-      { label: "New Sale", path: "/pos/billing", icon: ShoppingCart, permission: "pos.create" },
-      { label: "Menu Items", path: "/pos/products", icon: Package, permission: "pos.read" },
-      { label: "Regulars", path: "/pos/customers", icon: Users, permission: "pos.read" },
-      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.read" },
-      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.read" },
+      { label: "New Sale", path: "/pos/billing", icon: ShoppingCart, permission: "pos.sales.create" },
+      { label: "Menu Items", path: "/pos/products", icon: Package, permission: "pos.products.read" },
+      { label: "Regulars", path: "/pos/customers", icon: Users, permission: "pos.customers.read" },
+      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.shifts.read" },
+      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.sales.read" },
     ],
   },
   {
@@ -198,8 +198,8 @@ const shopConfig = [
     permission: "pos.read",
     menu: [
       { label: "Dashboard", path: "/pos", icon: Monitor, exact: true, permission: "pos.read" },
-      { label: "New Sale", path: "/pos/billing", icon: ShoppingCart, permission: "pos.create" },
-      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.read" },
+      { label: "New Sale", path: "/pos/billing", icon: ShoppingCart, permission: "pos.sales.create" },
+      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.sales.read" },
     ],
   },
   {
@@ -212,7 +212,7 @@ const shopConfig = [
     description: "Product catalog, prices, and barcode-ready items.",
     permission: "pos.read",
     menu: [
-      { label: "Products", path: "/pos/products", icon: Package, permission: "pos.read" },
+      { label: "Products", path: "/pos/products", icon: Package, permission: "pos.products.read" },
     ],
   },
   {
@@ -246,13 +246,13 @@ const generalConfig = [
     permission: "pos.read",
     menu: [
       { label: "Dashboard", path: "/pos", icon: Monitor, exact: true, permission: "pos.read" },
-      { label: "Billing", path: "/pos/billing", icon: ShoppingCart, permission: "pos.read" },
-      { label: "Floor Plan", path: "/pos/tables", icon: Table2, permission: "pos.read" },
-      { label: "Kitchen", path: "/pos/kds", icon: ChefHat, permission: "pos.read" },
-      { label: "Products", path: "/pos/products", icon: Package, permission: "pos.read" },
-      { label: "Customers", path: "/pos/customers", icon: Users, permission: "pos.read" },
-      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.read" },
-      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.read" },
+      { label: "Billing", path: "/pos/billing", icon: ShoppingCart, permission: "pos.sales.create" },
+      { label: "Floor Plan", path: "/pos/tables", icon: Table2, permission: "pos.tables.read" },
+      { label: "Kitchen", path: "/pos/kds", icon: ChefHat, permission: "pos.kitchen.read" },
+      { label: "Products", path: "/pos/products", icon: Package, permission: "pos.products.read" },
+      { label: "Customers", path: "/pos/customers", icon: Users, permission: "pos.customers.read" },
+      { label: "Sales History", path: "/pos/sales", icon: Receipt, permission: "pos.sales.read" },
+      { label: "Shifts", path: "/pos/shifts", icon: Clock, permission: "pos.shifts.read" },
     ],
   },
   {

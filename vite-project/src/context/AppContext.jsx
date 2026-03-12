@@ -96,8 +96,20 @@ export const AppContextProvider = (props) => {
       if (!required) return true;
       if (userPermissions.includes("*")) return true;
       if (userPermissions.includes(required)) return true;
-      const [module] = required.split(".");
-      if (userPermissions.includes(`${module}.*`)) return true;
+
+      const segments = String(required || "").split(".").filter(Boolean);
+
+      for (let index = segments.length - 1; index > 0; index -= 1) {
+        if (userPermissions.includes(`${segments.slice(0, index).join(".")}.*`)) {
+          return true;
+        }
+      }
+
+      if (segments.length > 2) {
+        const rootActionPermission = `${segments[0]}.${segments[segments.length - 1]}`;
+        if (userPermissions.includes(rootActionPermission)) return true;
+      }
+
       return false;
     }, [userPermissions]);
 

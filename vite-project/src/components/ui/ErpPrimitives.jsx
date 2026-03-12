@@ -9,7 +9,7 @@ const toneClasses = {
   rose: 'border-rose-200 bg-rose-50 text-rose-800',
   orange: 'border-orange-200 bg-orange-50 text-orange-800',
   emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  slate: 'border-stone-200 bg-stone-100 text-stone-800',
+  slate: 'border-slate-200 bg-slate-100 text-slate-700',
 }
 
 const iconToneClasses = {
@@ -19,7 +19,7 @@ const iconToneClasses = {
   rose: 'bg-rose-100 text-rose-700',
   orange: 'bg-orange-100 text-orange-700',
   emerald: 'bg-emerald-100 text-emerald-700',
-  slate: 'bg-stone-200 text-stone-700',
+  slate: 'bg-slate-200 text-slate-700',
 }
 
 export const WorkspacePage = ({ children, className = '' }) => (
@@ -34,8 +34,9 @@ export const PageHeader = ({
   actions = null,
   className = '',
 }) => (
-  <section className={`panel p-6 sm:p-8 ${className}`}>
-    <div className="erp-page-header">
+  <section className={`panel relative overflow-hidden p-6 sm:p-8 ${className}`}>
+    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-r from-emerald-50/80 via-white/0 to-amber-50/70" />
+    <div className="relative erp-page-header">
       <div className="max-w-3xl">
         {eyebrow ? <p className="section-kicker">{eyebrow}</p> : null}
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">{title}</h1>
@@ -83,6 +84,12 @@ export const SectionCard = ({
   </section>
 )
 
+export const StatusBadge = ({ children, tone = 'slate', className = '' }) => (
+  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${toneClasses[tone] || toneClasses.slate} ${className}`}>
+    {children}
+  </span>
+)
+
 export const KpiCard = ({
   icon: Icon,
   title,
@@ -98,7 +105,7 @@ export const KpiCard = ({
     <div className="erp-kpi-card">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-500">{title}</p>
+          <p className="text-sm font-medium text-slate-500">{title}</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
           {detail ? <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p> : null}
         </div>
@@ -120,13 +127,21 @@ export const KpiCard = ({
   )
 
   return to ? (
-    <Link to={to} className="block transition hover:-translate-y-0.5">
+    <Link to={to} className="block">
       {content}
     </Link>
   ) : (
     content
   )
 }
+
+export const DataTableShell = ({ children, className = '' }) => (
+  <div className={`erp-table-shell ${className}`}>{children}</div>
+)
+
+export const ListRow = ({ children, className = '' }) => (
+  <div className={`erp-list-row ${className}`}>{children}</div>
+)
 
 export const SearchField = ({
   value,
@@ -159,9 +174,9 @@ export const FieldLabel = ({ children, optional = false }) => (
 )
 
 export const EmptyCard = ({ title, message, action = null, icon: Icon = null }) => (
-  <div className="rounded-3xl border border-dashed border-stone-300 bg-white/80 p-10 text-center">
+  <div className="erp-empty-state">
     {Icon ? (
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-stone-100 text-stone-500">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
         <Icon className="h-6 w-6" />
       </div>
     ) : null}

@@ -5,10 +5,10 @@ import {
   AlertTriangle,
   Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote,
   Smartphone, UserPlus, X, Check, Printer, Utensils, Package, Bike,
-  ChevronDown, Star, Table2,
+  ChevronDown, Star, Table2, PauseCircle, PlayCircle, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { posProductApi, posCustomerApi, posSaleApi, posTableApi } from "../../api/posApi";
+import { posProductApi, posCustomerApi, posSaleApi, posShiftApi, posTableApi } from "../../api/posApi";
 import PrintableInvoice from "./components/PrintableInvoice";
 import { EmptyCard, PageHeader, SearchField, WorkspacePage } from "../../components/ui/ErpPrimitives.jsx";
 import { getBusinessPosMeta } from "../../config/businessConfigs.js";
@@ -19,8 +19,12 @@ import {
   buildQuickTenderValues,
   calculateCartTotals,
   calculateTenderState,
+  createHeldBillSnapshot,
   findExactProductMatch,
   getCheckoutIssues,
+  readHeldBills,
+  removeHeldBill,
+  saveHeldBill,
 } from "./utils/billing.js";
 
 const ORDER_TYPES = {
@@ -185,6 +189,7 @@ export default function BillingScreen() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [showQuickCustomerForm, setShowQuickCustomerForm] = useState(false);
   const [quickCustomer, setQuickCustomer] = useState({ name: "", phone: "" });
+  const [heldBills, setHeldBills] = useState(() => readHeldBills());
   const [overallDiscount, setOverallDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paidAmount, setPaidAmount] = useState("");
@@ -201,21 +206,31 @@ export default function BillingScreen() {
       : option;
   });
   const activeOrderType = posMeta.orderTypes.includes(orderType) ? orderType : posMeta.orderTypes[0];
-  const hasSelectedCustomerAccount = Boolean(selectedCustomer?._id);
-  const isWalkInSelection = Boolean(selectedCustomer) && !hasSelectedCustomerAccount;
+  const isWalkInSelection =
+    Boolean(selectedCustomer) && selectedCustomer?.customerType === "walk_in";
+  const hasSelectedCustomerAccount =
+    Boolean(selectedCustomer?._id) && !isWalkInSelection;
   const paymentOptions = POS_PAYMENT_METHODS.filter(({ key }) => key !== "mixed");
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
   // Data
-  const { data: productData } = useQuery({
+  const {
+    data: productData,
+    isFetching: isSearchingProducts,
+    isError: hasProductSearchError,
+  } = useQuery({
     queryKey: ["pos-products-billing", search],
     queryFn: () => posProductApi.list({ search, limit: 12, isAvailable: true }),
     enabled: search.length > 0,
   });
   const searchResults = productData?.data?.products || [];
 
-  const { data: allProductData } = useQuery({
+  const {
+    data: allProductData,
+    isLoading: isLoadingCatalog,
+    isError: hasCatalogError,
+  } = useQuery({
     queryKey: ["pos-products-all"],
     queryFn: () => posProductApi.list({ limit: 100, isAvailable: true }),
   });
@@ -223,7 +238,11 @@ export default function BillingScreen() {
   const menuCats = ["All", ...new Set(allProducts.map((p) => p.menuCategory || p.category).filter(Boolean))];
   const gridProducts = activeMenuCat === "All" ? allProducts : allProducts.filter((p) => (p.menuCategory || p.category) === activeMenuCat);
 
-  const { data: customerData } = useQuery({
+  const {
+    data: customerData,
+    isFetching: isSearchingCustomers,
+    isError: hasCustomerSearchError,
+  } = useQuery({
     queryKey: ["pos-customers-billing", customerSearch],
     queryFn: () =>
       posCustomerApi.list({
@@ -237,6 +256,29 @@ export default function BillingScreen() {
   const activeSearchCatalog = searchResults.length > 0
     ? [...searchResults, ...allProducts]
     : allProducts;
+  const { data: walkInCustomerData } = useQuery({
+    queryKey: ["pos-default-walk-in"],
+    queryFn: () =>
+      posCustomerApi.list({
+        includeWalkIn: true,
+        customerType: "walk_in",
+        limit: 1,
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+  const walkInCustomer = walkInCustomerData?.data?.[0] || null;
+
+  const {
+    data: currentShiftData,
+    isLoading: isLoadingShift,
+    isError: hasShiftError,
+  } = useQuery({
+    queryKey: ["pos-current-shift"],
+    queryFn: () => posShiftApi.current(),
+    refetchInterval: 60 * 1000,
+  });
+  const currentShift = currentShiftData?.data || null;
+  const hasOpenShift = Boolean(currentShift?._id);
 
   const { data: tablesData } = useQuery({
     queryKey: ["pos-tables"],
@@ -245,20 +287,43 @@ export default function BillingScreen() {
   });
   const availableTables = (tablesData?.data || []).filter((t) => t.status === "available" || t.status === "reserved");
 
+  useEffect(() => {
+    if (!selectedCustomer && walkInCustomer) {
+      setSelectedCustomer(walkInCustomer);
+    }
+  }, [selectedCustomer, walkInCustomer]);
+
+  const resetBill = (nextCustomer = walkInCustomer || null) => {
+    setCart([]);
+    setSearch("");
+    setCustomerSearch("");
+    setShowCustomerDropdown(false);
+    setShowQuickCustomerForm(false);
+    setQuickCustomer({ name: "", phone: "" });
+    setOverallDiscount(0);
+    setPaymentMethod("cash");
+    setPaidAmount("");
+    setLoyaltyRedeem(0);
+    setDeliveryAddress("");
+    setNotes("");
+    setSelectedTable(null);
+    setSelectedCustomer(nextCustomer);
+    searchRef.current?.focus();
+  };
+
   const saleMut = useMutation({
     mutationFn: (data) => posSaleApi.create(data),
     onSuccess: (res) => {
       toast.success("Sale completed!");
       setCompletedSale(res.data);
-      setCart([]); setSearch(""); setOverallDiscount(0); setPaidAmount("");
-      setSelectedCustomer(null); setSelectedTable(null); setNotes("");
-      setLoyaltyRedeem(0); setDeliveryAddress("");
+      resetBill();
       qc.invalidateQueries({ queryKey: ["pos-products"] });
       qc.invalidateQueries({ queryKey: ["pos-products-billing"] });
       qc.invalidateQueries({ queryKey: ["pos-products-all"] });
       qc.invalidateQueries({ queryKey: ["pos-sales"] });
       qc.invalidateQueries({ queryKey: ["pos-stats"] });
       qc.invalidateQueries({ queryKey: ["pos-tables"] });
+      qc.invalidateQueries({ queryKey: ["pos-current-shift"] });
     },
     onError: (e) => toast.error(e.response?.data?.message || "Sale failed"),
   });
@@ -318,6 +383,7 @@ export default function BillingScreen() {
       }];
     });
     setModifierTarget(null);
+    searchRef.current?.focus();
   };
 
   const handleProductClick = (product) => {
@@ -342,8 +408,95 @@ export default function BillingScreen() {
     );
   };
 
+  const setQty = (key, value) => {
+    const nextQty = Math.max(1, Number(value) || 1);
+    setCart((currentCart) =>
+      currentCart.map((item) =>
+        item._key === key ? { ...item, qty: nextQty } : item
+      )
+    );
+  };
+
+  const setDiscount = (key, value) => {
+    setCart((currentCart) =>
+      currentCart.map((item) => {
+        if (item._key !== key) return item;
+
+        const maxDiscount = (Number(item.price) || 0) * (Number(item.qty) || 0);
+        return {
+          ...item,
+          discount: Math.min(maxDiscount, Math.max(0, Number(value) || 0)),
+        };
+      })
+    );
+  };
+
   const removeItem = (key) =>
     setCart((currentCart) => currentCart.filter((c) => c._key !== key));
+
+  const handleHoldBill = () => {
+    if (cart.length === 0) {
+      toast.error("Add items before holding a bill.");
+      return;
+    }
+
+    const snapshot = createHeldBillSnapshot({
+      cart,
+      paymentMethod,
+      paidAmount,
+      selectedCustomer,
+      overallDiscount,
+      notes,
+      orderType: activeOrderType,
+      selectedTable,
+      deliveryAddress,
+      loyaltyRedeem,
+    });
+    const nextHeldBills = saveHeldBill(snapshot);
+    setHeldBills(nextHeldBills);
+    resetBill();
+    toast.success("Bill placed on hold.");
+  };
+
+  const handleResumeHeldBill = (bill) => {
+    if (!bill) return;
+
+    if (
+      cart.length > 0 &&
+      !window.confirm("Replace the current bill with this held bill?")
+    ) {
+      return;
+    }
+
+    setCart(Array.isArray(bill.cart) ? bill.cart : []);
+    setPaymentMethod(bill.paymentMethod || "cash");
+    setPaidAmount(bill.paidAmount || "");
+    setSelectedCustomer(bill.selectedCustomer || walkInCustomer || null);
+    setOverallDiscount(Number(bill.overallDiscount) || 0);
+    setNotes(bill.notes || "");
+    setOrderType(bill.orderType || "takeaway");
+    setSelectedTable(bill.selectedTable || null);
+    setDeliveryAddress(bill.deliveryAddress || "");
+    setLoyaltyRedeem(Number(bill.loyaltyRedeem) || 0);
+    setHeldBills(removeHeldBill(bill.id));
+    setSearch("");
+    setCompletedSale(null);
+    searchRef.current?.focus();
+    toast.success("Held bill resumed.");
+  };
+
+  const handleDiscardBill = () => {
+    if (cart.length === 0) {
+      resetBill();
+      return;
+    }
+
+    if (!window.confirm("Clear the current bill?")) {
+      return;
+    }
+
+    resetBill();
+  };
 
   // ─── Totals ───
   const totals = calculateCartTotals({
@@ -356,14 +509,17 @@ export default function BillingScreen() {
     amountTendered: paidAmount,
     paymentMethod,
   });
-  const checkoutIssues = getCheckoutIssues({
-    cart,
-    orderType: activeOrderType,
-    selectedTable,
-    paymentMethod,
-    selectedCustomer,
-    paymentState,
-  });
+  const checkoutIssues = [
+    ...getCheckoutIssues({
+      cart,
+      orderType: activeOrderType,
+      selectedTable,
+      paymentMethod,
+      selectedCustomer,
+      paymentState,
+    }),
+    ...(!hasOpenShift && !isLoadingShift ? ["Open a cashier shift before checkout."] : []),
+  ];
   const quickTenderValues = buildQuickTenderValues(totals.grandTotal);
 
   const handleCheckout = () => {
@@ -414,7 +570,7 @@ export default function BillingScreen() {
                 <Printer className="h-4 w-4" />
                 Print
               </button>
-              <button onClick={() => setCompletedSale(null)} className="btn-primary">
+              <button onClick={() => { setCompletedSale(null); resetBill(); }} className="btn-primary">
                 <Plus className="h-4 w-4" />
                 New sale
               </button>
@@ -442,7 +598,13 @@ export default function BillingScreen() {
         description="Keep item search, cart review, payment, and customer lookup inside one clear cashier workflow."
         badges={[
           branchName ? `Branch: ${branchName}` : "Main workspace",
+          hasOpenShift
+            ? `Shift: ${currentShift?.openedBy?.username || "Open"}`
+            : isLoadingShift
+              ? "Checking shift"
+              : "Shift closed",
           `${cart.length} cart items`,
+          heldBills.length > 0 ? `${heldBills.length} held bills` : "No held bills",
           activeOrderType === "takeaway" && !posMeta.allowTables ? "Counter sale" : ORDER_TYPES[activeOrderType]?.label || activeOrderType,
           hasSelectedCustomerAccount
             ? `Customer: ${selectedCustomer.name}`
@@ -494,6 +656,112 @@ export default function BillingScreen() {
           </div>
         </section>
 
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="panel p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Cashier shift</p>
+                <p className="text-xs text-slate-500">
+                  Keep one shift open so receipts, payments, and day-end totals stay reliable.
+                </p>
+              </div>
+              <Link to="/pos/shifts" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Manage shift
+              </Link>
+            </div>
+            <div className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${
+              hasOpenShift
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-amber-200 bg-amber-50 text-amber-800"
+            }`}>
+              {hasShiftError ? (
+                <p>Shift status could not be loaded. Open the shifts page if checkout looks blocked.</p>
+              ) : hasOpenShift ? (
+                <>
+                  <p className="font-semibold">Shift is open and ready for billing.</p>
+                  <p className="mt-1 text-xs">
+                    Started {currentShift?.openedAt ? formatDateTimeNepal(currentShift.openedAt) : "recently"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold">No open shift yet.</p>
+                  <p className="mt-1 text-xs">You can still build a cart, but checkout stays locked until a shift is opened.</p>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="panel p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Held bills</p>
+                <p className="text-xs text-slate-500">
+                  Park a bill during rush hours and resume it in one tap.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleHoldBill}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                >
+                  <PauseCircle className="mr-1 inline h-4 w-4" />
+                  Hold current
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardBill}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <RotateCcw className="mr-1 inline h-4 w-4" />
+                  Clear bill
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              {heldBills.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                  No held bills right now.
+                </p>
+              ) : (
+                heldBills.map((bill) => (
+                  <div key={bill.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {bill.summary?.customerName || "Walk-in Customer"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {bill.summary?.itemCount || 0} items · {formatShortCurrencyNpr(bill.summary?.grandTotal || 0)}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Held {bill.heldAt ? formatDateTimeNepal(bill.heldAt) : "recently"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleResumeHeldBill(bill)}
+                        className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                      >
+                        <PlayCircle className="mr-1 inline h-4 w-4" />
+                        Resume
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHeldBills(removeHeldBill(bill.id))}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* ─── LEFT: Products ─── */}
           <div className="lg:col-span-2 space-y-4">
@@ -522,6 +790,16 @@ export default function BillingScreen() {
                 placeholder="Search product name, SKU, or barcode..."
                 inputClassName="py-2.5"
               />
+              {hasProductSearchError ? (
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Product search could not be loaded. Try again or use the product grid below.
+                </div>
+              ) : null}
+              {search && isSearchingProducts ? (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Looking for matching products...
+                </div>
+              ) : null}
               {search && searchResults.length > 0 && (
                 <div className="mt-2 border border-gray-100 rounded-xl max-h-52 overflow-y-auto divide-y divide-gray-50">
                   {searchResults.map((p) => (
@@ -554,6 +832,11 @@ export default function BillingScreen() {
                   ))}
                 </div>
               )}
+              {search && !isSearchingProducts && !hasProductSearchError && searchResults.length === 0 ? (
+                <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  No matching product found. Try barcode, SKU, or a shorter name.
+                </div>
+              ) : null}
             </div>
 
             {/* Menu category pills + grid */}
@@ -575,7 +858,19 @@ export default function BillingScreen() {
                 </div>
                 {/* Product grid */}
                 <div className="grid max-h-[420px] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4">
-                  {gridProducts.map((p) => (
+                  {hasCatalogError ? (
+                    <div className="col-span-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-800">
+                      Product catalog could not be loaded.
+                    </div>
+                  ) : isLoadingCatalog ? (
+                    <div className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                      Loading product catalog...
+                    </div>
+                  ) : gridProducts.length === 0 ? (
+                    <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                      No products found in this category.
+                    </div>
+                  ) : gridProducts.map((p) => (
                     <button
                       key={p._id}
                       onClick={() => handleProductClick(p)}
@@ -626,7 +921,31 @@ export default function BillingScreen() {
                           <p className="text-xs text-indigo-500">{c.modifiers.map((m) => m.option).join(", ")}</p>
                         )}
                         {c.notes && <p className="text-xs text-rose-500 italic">{c.notes}</p>}
-                        <p className="text-xs text-gray-400">Rs. {c.price} each</p>
+                        <p className="text-xs text-gray-400">
+                          Rs. {c.price} each · VAT {Number(c.taxRate || 0)}%
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <label className="text-[11px] font-medium text-gray-500">
+                            Qty
+                            <input
+                              type="number"
+                              min="1"
+                              value={c.qty}
+                              onChange={(event) => setQty(c._key, event.target.value)}
+                              className="ml-2 w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </label>
+                          <label className="text-[11px] font-medium text-gray-500">
+                            Discount
+                            <input
+                              type="number"
+                              min="0"
+                              value={c.discount}
+                              onChange={(event) => setDiscount(c._key, event.target.value)}
+                              className="ml-2 w-20 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                          </label>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => updateQty(c._key, -1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
@@ -722,7 +1041,7 @@ export default function BillingScreen() {
             {/* Customer */}
             <div className="panel p-4">
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Customer</h3>
-              {selectedCustomer ? (
+              {hasSelectedCustomerAccount ? (
                 <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl">
                   <div>
                     <p className="font-semibold text-indigo-900 text-sm">{selectedCustomer.name}</p>
@@ -740,17 +1059,22 @@ export default function BillingScreen() {
                       ) : null}
                     </div>
                   </div>
-                  <button onClick={() => { setSelectedCustomer(null); setLoyaltyRedeem(0); }} className="p-1 text-indigo-400">
+                  <button onClick={() => { setSelectedCustomer(walkInCustomer || null); setLoyaltyRedeem(0); }} className="p-1 text-indigo-400">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
                 <div className="space-y-2">
+                  {selectedCustomer ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                      Walk-in customer is selected by default. Search or quick-add only when you need a named customer.
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedCustomer({
+                        setSelectedCustomer(walkInCustomer || {
                           _id: null,
                           name: "Walk-in Customer",
                           customerType: "walk_in",
@@ -798,7 +1122,15 @@ export default function BillingScreen() {
                     />
                     {showCustomerDropdown && customerSearch && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-20 max-h-40 overflow-y-auto">
-                        {customerResults.length > 0 ? (
+                        {hasCustomerSearchError ? (
+                          <div className="px-4 py-3 text-xs text-amber-700">
+                            Customer search could not be loaded right now.
+                          </div>
+                        ) : isSearchingCustomers ? (
+                          <div className="px-4 py-3 text-xs text-gray-500">
+                            Searching customers...
+                          </div>
+                        ) : customerResults.length > 0 ? (
                           customerResults.map((c) => (
                             <button
                               key={c._id}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, CheckSquare, LayoutDashboard, Settings, StickyNote } from 'lucide-react'
 import AppContext from '../context/app-context.js'
 import { getAppsForBusiness, getBusinessMeta } from '../config/businessConfigs'
-import { EmptyCard, PageHeader, SectionCard, WorkspacePage } from './ui/ErpPrimitives.jsx'
+import { EmptyCard, PageHeader, SectionCard, StatusBadge, WorkspacePage } from './ui/ErpPrimitives.jsx'
 
 const moduleTone = {
   amber: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -41,10 +41,10 @@ const AppSwitcher = () => {
   return (
     <WorkspacePage>
       <PageHeader
-        eyebrow="Work Areas"
+        eyebrow="Module Launcher"
         title={currentOrgName || 'My Business'}
         description={businessMeta.launcherDescription}
-        badges={[businessMeta.productName, 'Nepal-ready operations']}
+        badges={[businessMeta.productName, 'Nepal-ready operations', 'Low-training layout']}
         actions={
           <Link to="/dashboard" className="btn-secondary">
             Back to command center
@@ -54,9 +54,9 @@ const AppSwitcher = () => {
 
       <div className="grid gap-6 xl:grid-cols-[1.45fr,0.9fr]">
         <SectionCard
-          eyebrow="Primary Areas"
-          title="Daily work should stay inside a few clear modules."
-          description="Open the area that matches how this business runs today. Keep support tools separate from billing and stock work."
+          eyebrow="Primary Modules"
+          title="Daily work should stay inside a few obvious modules."
+          description="Open the area that matches how this business runs today. Keep billing, stock, finance, and support tools separated so staff need less training."
         >
           {visibleModules.length === 0 ? (
             <EmptyCard
@@ -72,11 +72,14 @@ const AppSwitcher = () => {
                 const visibleMenu = module.menu.filter(item => !item.permission || hasPermission(item.permission))
 
                 return (
-                  <div key={module.id} className="group rounded-3xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+                  <div key={module.id} className="group erp-module-card">
                     <div className={`inline-flex rounded-2xl border px-3 py-3 ${tone}`}>
                       <Icon className="h-5 w-5" />
                     </div>
-                    <h2 className="mt-4 text-lg font-semibold text-slate-900">{module.name}</h2>
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-900">{module.name}</h2>
+                      <StatusBadge tone="slate">{visibleMenu.length} views</StatusBadge>
+                    </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {visibleMenu.slice(0, 3).map(item => (
@@ -85,7 +88,7 @@ const AppSwitcher = () => {
                         </span>
                       ))}
                     </div>
-                    <div className="mt-5 flex items-center justify-between">
+                    <div className="mt-5 flex items-center justify-between gap-4">
                       <Link to={module.basePath} className="btn-primary">
                         Open {module.name}
                       </Link>
@@ -100,8 +103,8 @@ const AppSwitcher = () => {
 
         <aside className="erp-stack">
           <SectionCard
-            eyebrow="Your Software"
-            title="The active business package on this workspace."
+            eyebrow="Active Package"
+            title="The software package running on this workspace."
             description="Keep the product setup aligned with the business you are operating today."
           >
             <div className={`rounded-3xl border p-5 ${softwareTone[businessType] || softwareTone.general}`}>
@@ -138,6 +141,7 @@ const AppSwitcher = () => {
             <SectionCard
               eyebrow="Support Tools"
               title="Keep notes and tasks close, but out of the main sales path."
+              description="These tools help the team without getting in the way of sales or stock work."
             >
               <div className="space-y-4">
                 {visibleTools.map(tool => {

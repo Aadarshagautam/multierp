@@ -4,10 +4,12 @@ import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
 import { syncPurchaseInventory } from "../inventory/stockService.js";
 import { Purchase, PurchaseSupplier, purchasePaymentMethods } from "./model.js";
+import { sharedAccountingService } from "../../shared/accounting/index.js";
 import {
   appendReturnNotes,
   buildPurchaseFinancials,
 } from "./utils.js";
+import { buildAuditChanges, logAudit } from "../../core/utils/auditLogger.js";
 
 const buildScopeFilter = (req) => {
   const filter = buildTenantFilter(req);
@@ -20,6 +22,23 @@ const buildScopeFilter = (req) => {
 };
 
 const normalizeName = (value = "") => value.trim().toLowerCase();
+
+const syncPurchaseProductLink = async ({
+  purchase,
+  syncedInventoryItem,
+  session,
+}) => {
+  const linkedProductId = syncedInventoryItem?.productId || null;
+  if (!linkedProductId || !purchase) return purchase;
+
+  if (purchase.productId?.toString() === linkedProductId.toString()) {
+    return purchase;
+  }
+
+  purchase.productId = linkedProductId;
+  await purchase.save({ session });
+  return purchase;
+};
 
 const upsertSupplier = async ({ supplierName, supplierContact = "", notes = "" }, req, session = null) => {
   const scope = buildScopeFilter(req);
@@ -111,6 +130,20 @@ export const createSupplier = async (req, res) => {
       req
     );
 
+    await logAudit(
+      {
+        action: "create",
+        module: "purchases",
+        targetId: supplier?._id,
+        targetName: supplier?.name || name.trim(),
+        description: `Saved supplier ${supplier?.name || name.trim()}`,
+        metadata: {
+          contact: supplier?.contact || contact.trim(),
+        },
+      },
+      req
+    );
+
     return sendCreated(res, supplier, "Supplier saved");
   } catch (error) {
     console.error(error);
@@ -134,6 +167,7 @@ export const createPurchase = async (req, res) => {
 
   try {
     const {
+      productId = null,
       supplierName,
       supplierContact = "",
       productName,
@@ -145,7 +179,7 @@ export const createPurchase = async (req, res) => {
       paymentMethod = "cash",
       deliveryStatus = "pending",
       notes = "",
-    } = req.body;
+    } = req.validated?.body ?? req.body;
 
     if (!supplierName?.trim() || !productName?.trim() || quantity === undefined || unitPrice === undefined || !purchaseDate) {
       await session.abortTransaction();
@@ -171,6 +205,7 @@ export const createPurchase = async (req, res) => {
         orgId: req.orgId || null,
         branchId: req.membership?.branchId || null,
         supplierId: supplier?._id || null,
+        productId: productId || null,
         supplierName: supplierName.trim(),
         supplierContact: supplierContact.trim(),
         productName: productName.trim(),
@@ -191,13 +226,30 @@ export const createPurchase = async (req, res) => {
       { session }
     );
 
-    await syncPurchaseInventory({
+    const syncedInventoryItem = await syncPurchaseInventory({
       nextPurchase: purchase,
       req,
       session,
     });
+    await syncPurchaseProductLink({ purchase, syncedInventoryItem, session });
+    await sharedAccountingService.syncPurchase(purchase, req, { session });
 
     await session.commitTransaction();
+    await logAudit(
+      {
+        action: "create",
+        module: "purchases",
+        targetId: purchase._id,
+        targetName: purchase.productName,
+        description: `Created purchase for ${purchase.productName}`,
+        metadata: {
+          supplierName: purchase.supplierName,
+          totalAmount: purchase.totalAmount,
+          paymentStatus: purchase.paymentStatus,
+        },
+      },
+      req
+    );
 
     return sendCreated(res, purchase, "Purchase saved");
   } catch (error) {
@@ -214,7 +266,9 @@ export const updatePurchase = async (req, res) => {
   session.startTransaction();
 
   try {
-    const allowed = pick(req.body, [
+    const payload = req.validated?.body ?? req.body;
+    const allowed = pick(payload, [
+      "productId",
       "supplierName",
       "supplierContact",
       "productName",
@@ -243,6 +297,7 @@ export const updatePurchase = async (req, res) => {
       await session.abortTransaction();
       return sendError(res, { status: 404, message: "Purchase not found" });
     }
+    const existingSnapshot = existing.toObject();
 
     const nextSupplierName = (allowed.supplierName ?? existing.supplierName).trim();
     const nextSupplierContact = (allowed.supplierContact ?? existing.supplierContact).trim();
@@ -257,6 +312,7 @@ export const updatePurchase = async (req, res) => {
     const supplier = nextSupplierName
       ? await upsertSupplier({ supplierName: nextSupplierName, supplierContact: nextSupplierContact }, req, session)
       : null;
+    const nextProductId = allowed.productId ?? existing.productId?.toString() ?? null;
 
     const purchase = await Purchase.findOneAndUpdate(
       { _id: req.params.id, ...buildScopeFilter(req) },
@@ -264,6 +320,7 @@ export const updatePurchase = async (req, res) => {
         $set: {
           ...allowed,
           supplierId: supplier?._id || null,
+          productId: nextProductId || null,
           supplierName: nextSupplierName,
           supplierContact: nextSupplierContact,
           quantity: financials.quantity,
@@ -280,14 +337,41 @@ export const updatePurchase = async (req, res) => {
       { new: true, runValidators: true, session }
     );
 
-    await syncPurchaseInventory({
+    const syncedInventoryItem = await syncPurchaseInventory({
       previousPurchase: existing,
       nextPurchase: purchase,
       req,
       session,
     });
+    await syncPurchaseProductLink({ purchase, syncedInventoryItem, session });
+    await sharedAccountingService.syncPurchase(purchase, req, { session });
 
     await session.commitTransaction();
+    await logAudit(
+      {
+        action: "update",
+        module: "purchases",
+        targetId: purchase._id,
+        targetName: purchase.productName,
+        description: `Updated purchase for ${purchase.productName}`,
+        changes: buildAuditChanges(existingSnapshot, purchase.toObject(), [
+          "supplierName",
+          "supplierContact",
+          "productName",
+          "quantity",
+          "unitPrice",
+          "totalAmount",
+          "paidAmount",
+          "outstandingAmount",
+          "creditAmount",
+          "paymentStatus",
+          "paymentMethod",
+          "deliveryStatus",
+          "notes",
+        ]),
+      },
+      req
+    );
 
     return sendSuccess(res, { data: purchase, message: "Purchase updated" });
   } catch (error) {
@@ -304,6 +388,7 @@ export const returnPurchase = async (req, res) => {
   session.startTransaction();
 
   try {
+    const payload = req.validated?.body ?? req.body;
     const purchase = await Purchase.findOne({
       _id: req.params.id,
       ...buildScopeFilter(req),
@@ -319,7 +404,8 @@ export const returnPurchase = async (req, res) => {
       return sendError(res, { status: 400, message: "Only delivered purchases can be returned" });
     }
 
-    const returnQty = Number(req.body.quantity);
+    const purchaseSnapshot = purchase.toObject();
+    const returnQty = Number(payload.quantity);
     if (!Number.isFinite(returnQty) || returnQty <= 0) {
       await session.abortTransaction();
       return sendError(res, { status: 400, message: "Return quantity must be greater than 0" });
@@ -344,20 +430,49 @@ export const returnPurchase = async (req, res) => {
           paymentStatus: financials.paymentStatus,
           deliveryStatus:
             financials.returnedQty >= financials.quantity ? "returned" : "delivered",
-          returnNotes: appendReturnNotes(purchase.returnNotes, req.body.notes || ""),
+          returnNotes: appendReturnNotes(purchase.returnNotes, payload.notes || ""),
         },
       },
       { new: true, runValidators: true, session }
     );
 
-    await syncPurchaseInventory({
+    const syncedInventoryItem = await syncPurchaseInventory({
       previousPurchase: purchase,
       nextPurchase: updatedPurchase,
       req,
       session,
     });
+    await syncPurchaseProductLink({
+      purchase: updatedPurchase,
+      syncedInventoryItem,
+      session,
+    });
+    await sharedAccountingService.syncPurchase(updatedPurchase, req, { session });
 
     await session.commitTransaction();
+    await logAudit(
+      {
+        action: "return",
+        module: "purchases",
+        targetId: updatedPurchase._id,
+        targetName: updatedPurchase.productName,
+        description: `Returned purchase stock for ${updatedPurchase.productName}`,
+        changes: buildAuditChanges(purchaseSnapshot, updatedPurchase.toObject(), [
+          "returnedQty",
+          "returnedAmount",
+          "outstandingAmount",
+          "creditAmount",
+          "paymentStatus",
+          "deliveryStatus",
+          "returnNotes",
+        ]),
+        metadata: {
+          returnQty,
+          notes: (payload.notes || "").trim(),
+        },
+      },
+      req
+    );
     return sendSuccess(res, { data: updatedPurchase, message: "Purchase return saved" });
   } catch (error) {
     await session.abortTransaction();
@@ -387,8 +502,24 @@ export const deletePurchase = async (req, res) => {
       req,
       session,
     });
+    await sharedAccountingService.removePurchase(purchase._id, req, { session });
 
     await session.commitTransaction();
+    await logAudit(
+      {
+        action: "delete",
+        module: "purchases",
+        targetId: purchase._id,
+        targetName: purchase.productName,
+        description: `Deleted purchase for ${purchase.productName}`,
+        metadata: {
+          supplierName: purchase.supplierName,
+          totalAmount: purchase.totalAmount,
+          paymentStatus: purchase.paymentStatus,
+        },
+      },
+      req
+    );
 
     return sendSuccess(res, { message: "Purchase deleted" });
   } catch (error) {

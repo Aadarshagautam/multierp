@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Edit3, Trash2, X, Package, ChevronDown, ChevronUp, ToggleLeft, ToggleRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { posProductApi } from "../../api/posApi";
 import api from "../../Pages/lib/axios";
+import AppContext from "../../context/app-context.js";
 
 const MENU_CATEGORIES = ["Starters", "Mains", "Beverages", "Desserts", "Snacks", "Specials"];
 const UNITS = ["pcs", "kg", "g", "L", "ml", "plate", "cup", "bowl", "serving", "pair"];
@@ -22,6 +23,7 @@ const emptyModifier = { name: "", required: false, multiSelect: false, options: 
 const emptyRecipeItem = { inventoryItemId: "", ingredientName: "", qty: 1, unit: "" };
 
 export default function ProductManagement() {
+  const { hasPermission } = useContext(AppContext);
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("");
@@ -49,6 +51,9 @@ export default function ProductManagement() {
   const pagination = data?.data?.pagination || {};
   const categories = catData?.data || [];
   const inventoryItems = inventoryData?.data || [];
+  const canCreateProduct = hasPermission("pos.products.create");
+  const canUpdateProduct = hasPermission("pos.products.update");
+  const canDeleteProduct = hasPermission("pos.products.delete");
 
   const createMut = useMutation({
     mutationFn: (d) => posProductApi.create(d),
@@ -75,6 +80,7 @@ export default function ProductManagement() {
   });
 
   const openEdit = (p) => {
+    if (!canUpdateProduct) return;
     setEditId(p._id);
     setForm({
       name: p.name, sku: p.sku || "", barcode: p.barcode || "",
@@ -93,6 +99,10 @@ export default function ProductManagement() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if ((editId && !canUpdateProduct) || (!editId && !canCreateProduct)) {
+      toast.error("Your role cannot save product changes.");
+      return;
+    }
     const payload = {
       ...form,
       costPrice: Number(form.costPrice),
@@ -156,12 +166,14 @@ export default function ProductManagement() {
             <h1 className="text-2xl font-bold text-gray-900">Products &amp; Menu</h1>
             <p className="text-sm text-gray-500">Manage your products, menu items, and customizations</p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Product
-          </button>
+          {canCreateProduct && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Product
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -227,12 +239,18 @@ export default function ProductManagement() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button onClick={() => toggleAvailMut.mutate({ id: p._id, val: !p.isAvailable })}>
-                          {p.isAvailable
+                        {canUpdateProduct ? (
+                          <button onClick={() => toggleAvailMut.mutate({ id: p._id, val: !p.isAvailable })}>
+                            {p.isAvailable
+                              ? <ToggleRight className="w-6 h-6 text-green-500 mx-auto" />
+                              : <ToggleLeft className="w-6 h-6 text-gray-300 mx-auto" />
+                            }
+                          </button>
+                        ) : (
+                          p.isAvailable
                             ? <ToggleRight className="w-6 h-6 text-green-500 mx-auto" />
                             : <ToggleLeft className="w-6 h-6 text-gray-300 mx-auto" />
-                          }
-                        </button>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {p.modifiers?.length > 0
@@ -242,15 +260,19 @@ export default function ProductManagement() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { if (window.confirm(`Deactivate "${p.name}"?`)) deleteMut.mutate(p._id); }}
-                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canUpdateProduct && (
+                            <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDeleteProduct && (
+                            <button
+                              onClick={() => { if (window.confirm(`Deactivate "${p.name}"?`)) deleteMut.mutate(p._id); }}
+                              className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

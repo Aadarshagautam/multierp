@@ -1,4 +1,7 @@
-const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+import {
+  derivePaymentStatusFromAmounts,
+  roundMoney,
+} from "../../shared/billing/index.js";
 
 export const buildPurchaseFinancials = ({
   quantity,
@@ -46,8 +49,11 @@ export const buildPurchaseFinancials = ({
 
   const outstandingAmount = roundMoney(Math.max(0, netAmount - normalizedPaidAmount));
   const creditAmount = roundMoney(Math.max(0, normalizedPaidAmount - netAmount));
-  const normalizedPaymentStatus =
-    outstandingAmount === 0 ? "paid" : normalizedPaidAmount > 0 ? "partial" : "pending";
+  const normalizedPaymentStatus = derivePaymentStatusFromAmounts({
+    totalAmount: netAmount,
+    paidAmount: normalizedPaidAmount,
+    unpaidStatus: "pending",
+  });
 
   return {
     quantity: safeQuantity,

@@ -32,15 +32,21 @@ const permissionMiddleware = (requiredPermission) => {
       }
 
       const allPerms = buildEffectivePermissions(membership);
+      const requiredPermissions = Array.isArray(requiredPermission)
+        ? requiredPermission
+        : [requiredPermission];
 
-      if (!hasPermission(allPerms, requiredPermission)) {
+      if (!requiredPermissions.some((permission) => hasPermission(allPerms, permission))) {
         return res.status(403).json({
           success: false,
-          message: `Permission denied: ${requiredPermission}`,
+          message: `Permission denied: ${requiredPermissions.join(" or ")}`,
         });
       }
 
       req.membership = membership;
+      req.userRole = membership.role;
+      req.branchId = membership.branchId || null;
+      req.effectivePermissions = allPerms;
       next();
     } catch (error) {
       console.error("Permission check error:", error);

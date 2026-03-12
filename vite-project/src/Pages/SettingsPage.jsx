@@ -1,8 +1,11 @@
 import React, { useContext, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Building2, ChefHat, GitBranch, Package, Plus, Shield, ShoppingCart } from 'lucide-react'
+import StatePanel from '../components/StatePanel.jsx'
+import { FieldLabel, PageHeader, WorkspacePage } from '../components/ui/ErpPrimitives.jsx'
 import AppContext from '../context/app-context.js'
 import { getBusinessMeta } from '../config/businessConfigs.js'
+import { ASSIGNABLE_ROLE_OPTIONS, getRoleMeta } from '../config/roleMeta.js'
 import api from '../lib/api.js'
 import { DEFAULT_PHONE_PLACEHOLDER } from '../utils/nepal.js'
 
@@ -40,18 +43,6 @@ const buildSoftwareOptions = (includeGeneral = false) =>
     description: getBusinessMeta(value).settingsDescription,
     ...SOFTWARE_STYLES[value],
   }))
-
-const ROLE_LABELS = {
-  owner: 'Owner',
-  admin: 'Admin',
-  manager: 'Manager',
-  accountant: 'Accountant',
-  cashier: 'Cashier',
-  member: 'Member',
-  viewer: 'Viewer',
-}
-
-const ASSIGNABLE_ROLES = ['admin', 'manager', 'accountant', 'cashier', 'member', 'viewer']
 
 const SettingsPage = () => {
   const { currentOrgId, orgBusinessType, setOrgBusinessType, setCurrentOrgName, hasPermission } = useContext(AppContext)
@@ -230,34 +221,38 @@ const SettingsPage = () => {
 
   if (loading) {
     return (
-      <div className="page-shell">
-        <div className="panel p-8 text-center text-sm text-slate-500">Loading settings...</div>
-      </div>
+      <WorkspacePage>
+        <StatePanel
+          tone="teal"
+          title="Loading settings"
+          message="Checking company details, team members, branches, and package settings for this workspace."
+        />
+      </WorkspacePage>
     )
   }
 
   if (noOrg) {
     return (
-      <div className="page-shell">
-        <div className="panel p-8 sm:p-12">
-          <div className="mx-auto max-w-md text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
-              <Building2 className="h-6 w-6 text-amber-600" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-900">No organization linked</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Your account is not linked to an organization. This usually happens with legacy accounts. Please log out
-              and register again, or contact support.
-            </p>
-            <p className="mt-3 text-xs text-slate-400">Error: No organization selected (400)</p>
-          </div>
-        </div>
-      </div>
+      <WorkspacePage>
+        <StatePanel
+          tone="amber"
+          icon={Building2}
+          title="No organization linked"
+          message="Your account is not linked to an organization. This usually happens with legacy accounts. Please log out and register again, or contact support. Error: No organization selected (400)."
+        />
+      </WorkspacePage>
     )
   }
 
   return (
-    <div className="page-shell">
+    <WorkspacePage>
+      <PageHeader
+        eyebrow="Settings"
+        title="Workspace settings"
+        description="Manage the business package, company details, team access, and branches from one clear admin workspace."
+        badges={[selectedSoftware.label, softwarePlan === 'multi-branch' ? 'Multi-branch' : softwarePlan === 'growth' ? 'Growth plan' : 'Single branch']}
+      />
+
       <section className="panel p-6 sm:p-8">
         <p className="section-kicker">Business Package</p>
         <h2 className="mt-2 section-heading">Choose the package that matches your Nepal business.</h2>
@@ -310,29 +305,29 @@ const SettingsPage = () => {
         <h2 className="mt-2 section-heading">Update your organization details.</h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Company name</label>
+            <FieldLabel>Company name</FieldLabel>
             <input
               value={name}
               onChange={event => setName(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              className="input-primary"
               placeholder="My Business"
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Phone</label>
+            <FieldLabel>Phone</FieldLabel>
             <input
               value={phone}
               onChange={event => setPhone(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              className="input-primary"
               placeholder={DEFAULT_PHONE_PLACEHOLDER}
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">Business email</label>
+            <FieldLabel>Business email</FieldLabel>
             <input
               value={email}
               onChange={event => setEmail(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400"
+              className="input-primary"
               placeholder="contact@mybusiness.com"
             />
           </div>
@@ -341,7 +336,7 @@ const SettingsPage = () => {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            className="btn-primary disabled:opacity-60"
           >
             {saving ? 'Saving...' : 'Save changes'}
           </button>
@@ -358,7 +353,7 @@ const SettingsPage = () => {
             {hasPermission('users.invite') && (
               <button
                 onClick={() => setShowAddMember(previous => !previous)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="btn-primary"
               >
                 <Plus className="h-4 w-4" />
                 Add member
@@ -370,54 +365,54 @@ const SettingsPage = () => {
               <p className="mb-4 text-sm font-semibold text-slate-900">New team member</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Username</label>
+                  <FieldLabel>Username</FieldLabel>
                   <input
                     value={newMember.username}
                     onChange={event => setNewMember(previous => ({ ...previous, username: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="John"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Email</label>
+                  <FieldLabel>Email</FieldLabel>
                   <input
                     value={newMember.email}
                     onChange={event => setNewMember(previous => ({ ...previous, email: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="john@example.com"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Password (new users only)</label>
+                  <FieldLabel>Password (new users only)</FieldLabel>
                   <input
                     type="password"
                     value={newMember.password}
                     onChange={event => setNewMember(previous => ({ ...previous, password: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="Min 8 characters"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Role</label>
+                  <FieldLabel>Role</FieldLabel>
                   <select
                     value={newMember.role}
                     onChange={event => setNewMember(previous => ({ ...previous, role: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                   >
-                    {ASSIGNABLE_ROLES.map(role => (
+                    {ASSIGNABLE_ROLE_OPTIONS.map(role => (
                       <option key={role} value={role}>
-                        {ROLE_LABELS[role]}
+                        {getRoleMeta(role).label}
                       </option>
                     ))}
                   </select>
                 </div>
                 {branches.length > 1 && (
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600">Branch</label>
+                    <FieldLabel>Branch</FieldLabel>
                     <select
                       value={newMember.branchId}
                       onChange={event => setNewMember(previous => ({ ...previous, branchId: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                      className="input-primary"
                     >
                       <option value="">Primary branch</option>
                       {branches.map(branch => (
@@ -433,13 +428,13 @@ const SettingsPage = () => {
                 <button
                   onClick={handleAddMember}
                   disabled={addingMember}
-                  className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                  className="btn-primary disabled:opacity-60"
                 >
                   {addingMember ? 'Adding...' : 'Add member'}
                 </button>
                 <button
                   onClick={() => setShowAddMember(false)}
-                  className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="btn-secondary"
                 >
                   Cancel
                 </button>
@@ -459,6 +454,7 @@ const SettingsPage = () => {
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{member.username}</p>
                       <p className="text-xs text-slate-500">{member.email}</p>
+                      <p className="text-xs text-slate-400">{getRoleMeta(member.role).summary}</p>
                       {member.branchName && <p className="text-xs text-slate-400">{member.branchName}</p>}
                     </div>
                   </div>
@@ -469,9 +465,9 @@ const SettingsPage = () => {
                         onChange={event => handleMemberUpdate(member._id, event.target.value)}
                         className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-slate-400"
                       >
-                        {ASSIGNABLE_ROLES.map(role => (
+                        {ASSIGNABLE_ROLE_OPTIONS.map(role => (
                           <option key={role} value={role}>
-                            {ROLE_LABELS[role]}
+                            {getRoleMeta(role).label}
                           </option>
                         ))}
                       </select>
@@ -490,7 +486,7 @@ const SettingsPage = () => {
                     </div>
                   ) : (
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                      {ROLE_LABELS[member.role] || member.role}
+                      {getRoleMeta(member.role).label}
                     </span>
                   )}
                 </div>
@@ -519,38 +515,38 @@ const SettingsPage = () => {
               <p className="mb-4 text-sm font-semibold text-slate-900">Create branch</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Branch name</label>
+                  <FieldLabel>Branch name</FieldLabel>
                   <input
                     value={newBranch.name}
                     onChange={event => setNewBranch(previous => ({ ...previous, name: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="Downtown Branch"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Code</label>
+                  <FieldLabel>Code</FieldLabel>
                   <input
                     value={newBranch.code}
                     onChange={event => setNewBranch(previous => ({ ...previous, code: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="DT01"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Email</label>
+                  <FieldLabel>Email</FieldLabel>
                   <input
                     value={newBranch.email}
                     onChange={event => setNewBranch(previous => ({ ...previous, email: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder="branch@example.com"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600">Phone</label>
+                  <FieldLabel>Phone</FieldLabel>
                   <input
                     value={newBranch.phone}
                     onChange={event => setNewBranch(previous => ({ ...previous, phone: event.target.value }))}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+                    className="input-primary"
                     placeholder={DEFAULT_PHONE_PLACEHOLDER}
                   />
                 </div>
@@ -558,7 +554,7 @@ const SettingsPage = () => {
               <button
                 onClick={handleCreateBranch}
                 disabled={addingBranch}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                className="btn-primary mt-4 disabled:opacity-60"
               >
                 <GitBranch className="h-4 w-4" />
                 {addingBranch ? 'Creating...' : 'Create branch'}
@@ -591,7 +587,7 @@ const SettingsPage = () => {
           </div>
         </section>
       )}
-    </div>
+    </WorkspacePage>
   )
 }
 

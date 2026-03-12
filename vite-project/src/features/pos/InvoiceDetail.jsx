@@ -1,15 +1,18 @@
-import React from "react";
+import React, { useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Printer, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
 import { posSaleApi } from "../../api/posApi";
+import AppContext from "../../context/app-context.js";
 import PrintableInvoice from "./components/PrintableInvoice";
 
 const InvoiceDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasPermission } = useContext(AppContext);
+  const canRefundSale = hasPermission("pos.sales.refund");
 
   const { data, isLoading } = useQuery({
     queryKey: ["pos-sale", id],
@@ -63,7 +66,7 @@ const InvoiceDetail = () => {
             <ArrowLeft className="w-4 h-4" /> Back to Sales
           </button>
           <div className="flex gap-2">
-            {sale.status !== "refund" && (
+            {sale.status !== "refund" && canRefundSale && (
               <button
                 onClick={handleRefund}
                 disabled={refundMut.isPending}

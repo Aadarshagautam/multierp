@@ -1,19 +1,60 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Building2, ChevronRight, LayoutGrid, LogOut, Mail, Menu, Receipt, ShoppingCart, Sparkles, User, X } from 'lucide-react'
+import {
+  Bell,
+  Building2,
+  ChevronRight,
+  LayoutGrid,
+  LogOut,
+  Mail,
+  Menu,
+  Receipt,
+  ShoppingCart,
+  User,
+  X,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import AppContext from '../context/app-context.js'
 import { getActiveAppForBusiness, getAppsForBusiness, getBusinessMeta, isMenuItemActive } from '../config/businessConfigs'
+import { getRoleMeta } from '../config/roleMeta.js'
 import api from '../lib/api.js'
 
 const accentClasses = {
-  amber: { bg: 'bg-amber-50', text: 'text-amber-900', border: 'border-amber-200', icon: 'bg-amber-100 text-amber-700' },
-  teal: { bg: 'bg-emerald-50', text: 'text-emerald-900', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700' },
-  blue: { bg: 'bg-sky-50', text: 'text-sky-900', border: 'border-sky-200', icon: 'bg-sky-100 text-sky-700' },
-  rose: { bg: 'bg-rose-50', text: 'text-rose-900', border: 'border-rose-200', icon: 'bg-rose-100 text-rose-700' },
-  orange: { bg: 'bg-orange-50', text: 'text-orange-900', border: 'border-orange-200', icon: 'bg-orange-100 text-orange-700' },
-  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-900', border: 'border-emerald-200', icon: 'bg-emerald-100 text-emerald-700' },
-  slate: { bg: 'bg-stone-100', text: 'text-stone-800', border: 'border-stone-200', icon: 'bg-stone-200 text-stone-700' },
+  amber: {
+    icon: 'bg-amber-300/15 text-amber-100',
+    active: 'border-amber-300/10 bg-amber-300/10',
+    accent: 'text-amber-100',
+  },
+  teal: {
+    icon: 'bg-emerald-300/15 text-emerald-100',
+    active: 'border-emerald-300/10 bg-emerald-300/10',
+    accent: 'text-emerald-100',
+  },
+  blue: {
+    icon: 'bg-sky-300/15 text-sky-100',
+    active: 'border-sky-300/10 bg-sky-300/10',
+    accent: 'text-sky-100',
+  },
+  rose: {
+    icon: 'bg-rose-300/15 text-rose-100',
+    active: 'border-rose-300/10 bg-rose-300/10',
+    accent: 'text-rose-100',
+  },
+  orange: {
+    icon: 'bg-orange-300/15 text-orange-100',
+    active: 'border-orange-300/10 bg-orange-300/10',
+    accent: 'text-orange-100',
+  },
+  emerald: {
+    icon: 'bg-emerald-300/15 text-emerald-100',
+    active: 'border-emerald-300/10 bg-emerald-300/10',
+    accent: 'text-emerald-100',
+  },
+  slate: {
+    icon: 'bg-white/10 text-white',
+    active: 'border-white/10 bg-white/8',
+    accent: 'text-white',
+  },
 }
 
 const getPrimaryActionForBusiness = (businessType) => {
@@ -40,7 +81,6 @@ const DashboardLayout = () => {
 
   return (
     <>
-      <TopBar activeApp={activeApp} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(previous => !previous)} />
       <Sidebar
         activeApp={activeApp}
         pathname={location.pathname}
@@ -48,6 +88,7 @@ const DashboardLayout = () => {
         closeSidebar={() => setSidebarOpen(false)}
         businessType={orgBusinessType}
       />
+      <TopBar activeApp={activeApp} sidebarOpen={sidebarOpen} toggleSidebar={() => setSidebarOpen(previous => !previous)} />
       <Outlet />
     </>
   )
@@ -57,8 +98,9 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
   const navigate = useNavigate()
   const profileRef = useRef(null)
   const [profileOpen, setProfileOpen] = useState(false)
-  const { userData, setUserData, setIsLoggedin, isLoggedin, currentOrgName, orgBusinessType } = useContext(AppContext)
+  const { userData, userRole, setUserData, setIsLoggedin, isLoggedin, currentOrgName, orgBusinessType } = useContext(AppContext)
   const primaryAction = getPrimaryActionForBusiness(orgBusinessType)
+  const roleMeta = getRoleMeta(userRole)
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -100,67 +142,69 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-stone-200/70 bg-[rgba(255,250,242,0.88)] backdrop-blur-xl">
-      <div className="flex min-h-16 items-center justify-between gap-4 px-4 py-2 lg:pl-[17rem] lg:pr-6">
+    <header className="erp-shell-topbar">
+      <div className="flex min-h-[4.5rem] items-center justify-between gap-4 px-4 lg:pl-[19rem] lg:pr-6">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={toggleSidebar}
-            className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 lg:hidden"
+            className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50 lg:hidden"
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          <Link to="/home" className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900 via-emerald-700 to-amber-500 text-sm font-bold text-white shadow-sm">
+          <Link to="/home" className="flex items-center gap-3 lg:hidden">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold text-white gradient-bg">
               CO
             </div>
-            <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-sm font-semibold text-slate-900">CommerceOS</p>
-              <p className="truncate text-xs text-slate-500">Nepal Business Software</p>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">CommerceOS</p>
+              <p className="text-xs text-slate-500">Nepal business suite</p>
             </div>
           </Link>
 
-          {activeApp && (
-            <div className="hidden min-w-0 items-center gap-3 rounded-full border border-stone-200 bg-white/80 px-3 py-1.5 xl:flex">
-              <Sparkles className="h-4 w-4 shrink-0 text-amber-500" />
+          {activeApp ? (
+            <div className="hidden min-w-0 items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 lg:flex">
+              <div className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Active
+              </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-800">{activeApp.name}</p>
+                <p className="truncate text-sm font-semibold text-slate-900">{activeApp.name}</p>
                 <p className="truncate text-xs text-slate-500">{activeApp.description}</p>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">
-          {currentOrgName && (
-            <div className="hidden items-center gap-2 rounded-full border border-stone-200 bg-white/80 px-3 py-2 text-sm text-slate-600 xl:flex">
+          {currentOrgName ? (
+            <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 xl:flex">
               <Building2 className="h-4 w-4 text-slate-400" />
               <span className="max-w-[11rem] truncate">{currentOrgName}</span>
-              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">NPR</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-800">NPR</span>
             </div>
-          )}
+          ) : null}
 
           {isLoggedin ? (
             <>
               <button
                 onClick={() => navigate(primaryAction.path)}
-                className="hidden rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 lg:inline-flex"
+                className="hidden btn-primary lg:inline-flex"
               >
                 {primaryAction.label}
               </button>
 
               <Link
                 to="/apps"
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                 title="Open work areas"
               >
                 <LayoutGrid className="h-5 w-5" />
-                <span className="hidden md:inline">Work areas</span>
+                <span className="hidden md:inline">Modules</span>
               </Link>
 
-              <button className="relative rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50">
+              <button className="relative rounded-2xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50">
                 <Bell className="h-5 w-5" />
-                {userData && !userData.isAccountVerified && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" />}
+                {userData && !userData.isAccountVerified ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500" /> : null}
               </button>
 
               <div ref={profileRef} className="relative">
@@ -168,24 +212,30 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
                   onClick={() => setProfileOpen((open) => !open)}
                   className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-2 py-1.5 transition hover:bg-slate-50"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900 via-emerald-700 to-amber-500 text-sm font-semibold text-white">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl text-sm font-semibold text-white gradient-bg">
                     {userData?.username?.[0]?.toUpperCase() || 'U'}
                   </div>
                   <div className="hidden min-w-0 text-left md:block">
                     <p className="max-w-[8rem] truncate text-sm font-medium text-slate-900">{userData?.username || 'User'}</p>
-                    <p className="max-w-[8rem] truncate text-xs text-slate-500">{currentOrgName || 'Workspace'}</p>
+                    <p className="max-w-[8rem] truncate text-xs text-slate-500">
+                      {roleMeta.label} · {currentOrgName || 'Workspace'}
+                    </p>
                   </div>
                 </button>
 
-                <div className={`absolute right-0 mt-2 w-72 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl transition-all duration-150 ${profileOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
+                <div className={`absolute right-0 mt-2 w-72 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl transition-all duration-150 ${profileOpen ? 'visible opacity-100' : 'invisible opacity-0'}`}>
                   <div className="border-b border-slate-100 px-4 py-4">
                     <p className="truncate text-sm font-semibold text-slate-900">{userData?.username || 'User'}</p>
                     <p className="truncate text-xs text-slate-500">{userData?.email}</p>
-                    {currentOrgName && <p className="truncate text-xs text-slate-400">{currentOrgName}</p>}
+                    <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                      {roleMeta.label}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">{roleMeta.summary}</p>
+                    {currentOrgName ? <p className="truncate text-xs text-slate-400">{currentOrgName}</p> : null}
                   </div>
 
                   <div className="p-2">
-                    {userData && !userData.isAccountVerified && (
+                    {userData && !userData.isAccountVerified ? (
                       <button
                         onClick={sendVerificationOtp}
                         className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-amber-50"
@@ -193,7 +243,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
                         <Mail className="h-4 w-4 text-amber-500" />
                         Verify email
                       </button>
-                    )}
+                    ) : null}
 
                     <Link
                       to="/dashboard"
@@ -204,7 +254,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
                       My profile
                     </Link>
 
-                  <div className="my-2 h-px bg-stone-100" />
+                    <div className="my-2 h-px bg-slate-100" />
 
                     <button
                       onClick={logout}
@@ -220,7 +270,7 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
           ) : (
             <button
               onClick={() => navigate('/login')}
-              className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="btn-primary"
             >
               Login
             </button>
@@ -233,9 +283,10 @@ const TopBar = ({ activeApp, sidebarOpen, toggleSidebar }) => {
 
 const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) => {
   const navigate = useNavigate()
-  const { hasPermission } = useContext(AppContext)
+  const { hasPermission, userRole } = useContext(AppContext)
   const apps = getAppsForBusiness(businessType)
   const businessMeta = getBusinessMeta(businessType)
+  const roleMeta = getRoleMeta(userRole)
   const primaryAction = getPrimaryActionForBusiness(businessType)
   const PrimaryActionIcon = primaryAction.icon
 
@@ -256,21 +307,36 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 z-30 bg-slate-950/25 lg:hidden" onClick={closeSidebar} />}
+      {isOpen ? <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={closeSidebar} /> : null}
 
       <aside
-        className={`fixed left-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r border-stone-200 bg-[rgba(255,250,242,0.94)] backdrop-blur transition-transform duration-200 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`erp-shell-sidebar ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
+        <div className="border-b border-white/10 px-4 py-4">
+          <Link to="/home" className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white gradient-bg">
+              CO
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">CommerceOS</p>
+              <p className="truncate text-xs text-white/55">Simple ERP for Nepal businesses</p>
+            </div>
+          </Link>
+        </div>
+
         <div className="px-4 pt-4">
-          <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">{businessMeta.shortLabel}</p>
-            <h2 className="mt-1.5 text-sm font-semibold text-slate-900">{businessMeta.productName}</h2>
-            <p className="mt-1 text-xs leading-5 text-slate-600">{businessMeta.workspaceSummary}</p>
+          <div className="erp-sidebar-card">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200/80">{businessMeta.shortLabel}</p>
+            <h2 className="mt-2 text-sm font-semibold text-white">{businessMeta.productName}</h2>
+            <p className="mt-2 text-xs leading-5 text-white/62">{businessMeta.workspaceSummary}</p>
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">Signed in as</p>
+              <p className="mt-1 text-sm font-semibold text-white">{roleMeta.label}</p>
+              <p className="mt-1 text-xs leading-5 text-white/60">{roleMeta.summary}</p>
+            </div>
             <button
               onClick={() => handleMenuClick(primaryAction.path)}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
             >
               <PrimaryActionIcon className="h-4 w-4" />
               {primaryAction.label}
@@ -279,9 +345,8 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Primary Areas</div>
-
-          <div className="space-y-1.5">
+          <div className="erp-sidebar-section">Modules</div>
+          <div className="mt-3 space-y-1.5">
             {visibleApps.map(app => {
               const Icon = app.icon
               const accent = accentClasses[app.accent] || accentClasses.slate
@@ -292,28 +357,26 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
                 <div key={app.id}>
                   <button
                     onClick={() => handleAppClick(app)}
-                    className={`w-full rounded-3xl border px-3 py-3 text-left transition ${
-                      isActive ? `${accent.bg} ${accent.border} shadow-sm` : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
-                    }`}
+                    className={`erp-sidebar-item ${isActive ? `erp-sidebar-item-active ${accent.active}` : ''}`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isActive ? accent.icon : 'bg-slate-100 text-slate-500'}`}>
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isActive ? accent.icon : 'bg-white/8 text-white/72'}`}>
                         <Icon className="h-5 w-5" />
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className={`text-sm font-semibold ${isActive ? accent.text : 'text-slate-800'}`}>{app.name}</p>
-                          {visibleMenu.length > 1 && (
-                            <ChevronRight className={`ml-auto h-4 w-4 transition ${isActive ? 'rotate-90 text-slate-400' : 'text-slate-300'}`} />
-                          )}
+                          <p className={`text-sm font-semibold ${isActive ? accent.accent : 'text-white'}`}>{app.name}</p>
+                          {visibleMenu.length > 1 ? (
+                            <ChevronRight className={`ml-auto h-4 w-4 transition ${isActive ? 'rotate-90 text-white/55' : 'text-white/35'}`} />
+                          ) : null}
                         </div>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">{app.description}</p>
+                        <p className="mt-1 text-xs leading-5 text-white/58">{app.description}</p>
                       </div>
                     </div>
                   </button>
 
-                  {isActive && visibleMenu.length > 0 && (
+                  {isActive && visibleMenu.length > 0 ? (
                     <div className="mt-1 space-y-1 pl-14 pr-1">
                       {visibleMenu.map(item => {
                         const ItemIcon = item.icon
@@ -323,9 +386,7 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
                           <button
                             key={item.path}
                             onClick={() => handleMenuClick(item.path)}
-                            className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${
-                              menuActive ? `${accent.border} bg-white ${accent.text} shadow-sm` : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                            }`}
+                            className={`erp-sidebar-subitem ${menuActive ? 'erp-sidebar-subitem-active' : ''}`}
                           >
                             <ItemIcon className="h-4 w-4 shrink-0" />
                             <span className="truncate">{item.label}</span>
@@ -333,35 +394,31 @@ const Sidebar = ({ activeApp, pathname, isOpen, closeSidebar, businessType }) =>
                         )
                       })}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )
             })}
           </div>
         </nav>
 
-        {showSettings && (
-          <div className="border-t border-slate-200 px-3 py-3">
+        {showSettings ? (
+          <div className="border-t border-white/10 px-3 py-3">
             <button
               onClick={() => handleAppClick(settingsApp)}
-              className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                activeApp?.id === 'settings'
-                  ? 'border-indigo-200 bg-indigo-50 text-indigo-800 shadow-sm'
-                  : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`erp-sidebar-item ${activeApp?.id === 'settings' ? 'erp-sidebar-item-active border-white/10 bg-white/10' : ''}`}
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-200 text-slate-700">
-                  {SettingsIcon && <SettingsIcon className="h-5 w-5" />}
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-white/80">
+                  {SettingsIcon ? <SettingsIcon className="h-5 w-5" /> : null}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold">Settings</p>
-                  <p className="text-xs text-slate-500">Company setup and access control</p>
+                  <p className="text-sm font-semibold text-white">Settings</p>
+                  <p className="text-xs text-white/55">Company, branches, and staff access</p>
                 </div>
               </div>
             </button>
           </div>
-        )}
+        ) : null}
       </aside>
     </>
   )

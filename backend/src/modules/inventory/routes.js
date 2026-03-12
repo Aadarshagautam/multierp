@@ -32,7 +32,7 @@ router.post(
 router.post(
   "/:id/adjustments",
   userAuth,
-  permissionMiddleware("inventory.update"),
+  permissionMiddleware("inventory.adjust"),
   validateRequest({ body: createInventoryAdjustmentSchema }),
   createInventoryAdjustment
 );

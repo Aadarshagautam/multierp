@@ -8,16 +8,17 @@ import {
   formatCurrencyNpr,
   formatDateNepal,
 } from "../../core/utils/nepal.js";
-import { calculateInvoiceTotals } from "../../shared/invoices/calculations.js";
 import {
-  buildInvoiceNumber,
-  buildInvoiceSequenceKey,
-  getNextSequence,
-  peekNextSequence,
-} from "../../core/utils/sequence.js";
+  buildInvoiceStatusState,
+  calculateInvoiceTotals,
+  getNextInvoiceNumber as reserveNextInvoiceNumber,
+  peekNextInvoiceNumber as previewNextInvoiceNumber,
+} from "../../shared/billing/index.js";
 import { buildTenantFilter, mergeTenantFilter } from "../../core/utils/tenant.js";
 import { hydrateInvoiceItemsWithProducts } from "../../shared/products/service.js";
 import { sharedCustomerService } from "../../shared/customers/service.js";
+import { sharedAccountingService } from "../../shared/accounting/index.js";
+import { buildAuditChanges, logAudit } from "../../core/utils/auditLogger.js";
 
 const formatMoney = (value) => `NPR ${formatCurrencyNpr(value)}`;
 
@@ -98,16 +99,12 @@ export const getInvoiceStats = async (req, res) => {
 export const getNextInvoiceNumber = async (req, res) => {
   try {
     const userId = req.userId;
-    const nextSeq = await peekNextSequence(
-      buildInvoiceSequenceKey({ orgId: req.orgId, userId })
+    const numbering = await previewNextInvoiceNumber(
+      { orgId: req.orgId, userId },
+      {}
     );
-    const nextNumber = buildInvoiceNumber({
-      orgId: req.orgId,
-      userId,
-      seq: nextSeq,
-    });
 
-    return sendSuccess(res, { data: { invoiceNumber: nextNumber } });
+    return sendSuccess(res, { data: { invoiceNumber: numbering.invoiceNumber } });
   } catch (error) {
     console.error(error);
     return sendError(res, { status: 500, message: "Server error" });
@@ -120,7 +117,7 @@ export const createInvoice = async (req, res) => {
     const ownerFilter = buildTenantFilter(req);
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
-      withoutVat, dueDate, paymentMethod, notes, status,
+      withoutVat, vatDiscountMode, dueDate, paymentMethod, notes, status,
     } = req.validated?.body ?? req.body;
 
     const customer = await sharedCustomerService.getById(customerId, req, {
@@ -131,26 +128,26 @@ export const createInvoice = async (req, res) => {
     }
     const customerSnapshot = sharedCustomerService.buildSnapshot(customer);
 
-    const invoiceSeq = await getNextSequence(
-      buildInvoiceSequenceKey({ orgId: req.orgId, userId })
+    const numbering = await reserveNextInvoiceNumber(
+      { orgId: req.orgId, userId },
+      {}
     );
-    const invoiceNumber = buildInvoiceNumber({
-      orgId: req.orgId,
-      userId,
-      seq: invoiceSeq,
-    });
     const hydratedItems = await hydrateInvoiceItemsWithProducts(items, req);
     const totals = calculateInvoiceTotals({
       items: hydratedItems,
       overallDiscountType: overallDiscountType || "none",
       overallDiscountValue: overallDiscountValue || 0,
       withoutVat: withoutVat || false,
+      vatDiscountMode: vatDiscountMode || "after_vat_no_prorate",
+    });
+    const invoiceStatus = buildInvoiceStatusState({
+      status: status || "draft",
     });
 
     const invoice = new Invoice({
       userId,
       orgId: req.orgId,
-      invoiceNumber,
+      invoiceNumber: numbering.invoiceNumber,
       customerId: customerSnapshot.customerId,
       customerName: customerSnapshot.customerName,
       customerEmail: customerSnapshot.customerEmail,
@@ -166,14 +163,32 @@ export const createInvoice = async (req, res) => {
       overallDiscountAmount: totals.overallDiscountAmount,
       grandTotal: totals.grandTotal,
       withoutVat: totals.withoutVat,
-      status: status || "draft",
+      vatDiscountMode: totals.vatDiscountMode,
+      status: invoiceStatus.status,
       issueDate: new Date(),
       dueDate: new Date(dueDate),
+      paidDate: invoiceStatus.paidDate,
       paymentMethod: paymentMethod || "cash",
       notes: notes || "",
     });
 
     await invoice.save();
+    await sharedAccountingService.syncInvoice(invoice, req);
+    await logAudit(
+      {
+        action: "create",
+        module: "invoices",
+        targetId: invoice._id,
+        targetName: invoice.invoiceNumber,
+        description: `Created invoice ${invoice.invoiceNumber}`,
+        metadata: {
+          status: invoice.status,
+          grandTotal: invoice.grandTotal,
+          customerName: invoice.customerName,
+        },
+      },
+      req
+    );
     return sendCreated(res, invoice, "Invoice created");
   } catch (error) {
     console.error(error);
@@ -187,19 +202,21 @@ export const updateInvoice = async (req, res) => {
     const ownerFilter = buildTenantFilter(req);
     const {
       customerId, items, overallDiscountType, overallDiscountValue,
-      withoutVat, dueDate, paymentMethod, notes, status,
+      withoutVat, vatDiscountMode, dueDate, paymentMethod, notes, status,
     } = req.validated?.body ?? req.body;
 
     const invoice = await Invoice.findOne({ _id: id, ...ownerFilter });
     if (!invoice) {
       return sendError(res, { status: 404, message: "Invoice not found" });
     }
+    const invoiceSnapshot = invoice.toObject();
 
     const shouldRecalculate = Boolean(
       items ||
       overallDiscountType !== undefined ||
       overallDiscountValue !== undefined ||
-      withoutVat !== undefined
+      withoutVat !== undefined ||
+      vatDiscountMode !== undefined
     );
 
     if (shouldRecalculate) {
@@ -214,6 +231,7 @@ export const updateInvoice = async (req, res) => {
             ? overallDiscountValue
             : invoice.overallDiscountValue,
         withoutVat: withoutVat !== undefined ? withoutVat : invoice.withoutVat,
+        vatDiscountMode: vatDiscountMode || invoice.vatDiscountMode,
       });
 
       invoice.items = totals.items;
@@ -225,6 +243,7 @@ export const updateInvoice = async (req, res) => {
       invoice.overallDiscountAmount = totals.overallDiscountAmount;
       invoice.grandTotal = totals.grandTotal;
       invoice.withoutVat = totals.withoutVat;
+      invoice.vatDiscountMode = totals.vatDiscountMode;
     }
 
     if (customerId) {
@@ -247,9 +266,46 @@ export const updateInvoice = async (req, res) => {
     if (dueDate) invoice.dueDate = new Date(dueDate);
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
     if (notes !== undefined) invoice.notes = notes;
-    if (status) invoice.status = status;
+    if (status) {
+      const invoiceStatus = buildInvoiceStatusState({
+        status,
+        currentPaidDate: invoice.paidDate,
+      });
+      invoice.status = invoiceStatus.status;
+      invoice.paidDate = invoiceStatus.paidDate;
+    }
 
     await invoice.save();
+    await sharedAccountingService.syncInvoice(invoice, req);
+    await logAudit(
+      {
+        action: "update",
+        module: "invoices",
+        targetId: invoice._id,
+        targetName: invoice.invoiceNumber,
+        description: `Updated invoice ${invoice.invoiceNumber}`,
+        changes: buildAuditChanges(invoiceSnapshot, invoice.toObject(), [
+          "customerName",
+          "customerPhone",
+          "subtotal",
+          "totalVat",
+          "totalItemDiscount",
+          "overallDiscountAmount",
+          "grandTotal",
+          "withoutVat",
+          "vatDiscountMode",
+          "status",
+          "dueDate",
+          "paymentMethod",
+          "notes",
+        ]),
+        metadata: {
+          itemCountBefore: Array.isArray(invoiceSnapshot.items) ? invoiceSnapshot.items.length : 0,
+          itemCountAfter: Array.isArray(invoice.items) ? invoice.items.length : 0,
+        },
+      },
+      req
+    );
     return sendSuccess(res, { data: invoice, message: "Invoice updated" });
   } catch (error) {
     console.error(error);
@@ -267,11 +323,28 @@ export const updateInvoiceStatus = async (req, res) => {
     if (!invoice) {
       return sendError(res, { status: 404, message: "Invoice not found" });
     }
+    const invoiceSnapshot = invoice.toObject();
 
-    invoice.status = status;
-    if (status === "paid") invoice.paidDate = new Date();
+    const invoiceStatus = buildInvoiceStatusState({
+      status,
+      currentPaidDate: invoice.paidDate,
+    });
+    invoice.status = invoiceStatus.status;
+    invoice.paidDate = invoiceStatus.paidDate;
 
     await invoice.save();
+    await sharedAccountingService.syncInvoice(invoice, req);
+    await logAudit(
+      {
+        action: "status_change",
+        module: "invoices",
+        targetId: invoice._id,
+        targetName: invoice.invoiceNumber,
+        description: `Changed invoice ${invoice.invoiceNumber} status to ${invoice.status}`,
+        changes: buildAuditChanges(invoiceSnapshot, invoice.toObject(), ["status", "paidDate"]),
+      },
+      req
+    );
     return sendSuccess(res, { data: invoice, message: "Invoice status updated" });
   } catch (error) {
     console.error(error);
@@ -288,6 +361,23 @@ export const deleteInvoice = async (req, res) => {
     if (!invoice) {
       return sendError(res, { status: 404, message: "Invoice not found" });
     }
+
+    await sharedAccountingService.removeInvoice(id, req);
+    await logAudit(
+      {
+        action: "delete",
+        module: "invoices",
+        targetId: invoice._id,
+        targetName: invoice.invoiceNumber,
+        description: `Deleted invoice ${invoice.invoiceNumber}`,
+        metadata: {
+          status: invoice.status,
+          grandTotal: invoice.grandTotal,
+          customerName: invoice.customerName,
+        },
+      },
+      req
+    );
 
     return sendSuccess(res, { message: "Invoice deleted" });
   } catch (error) {

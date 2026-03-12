@@ -1,35 +1,19 @@
 import mongoose from "mongoose";
 import Inventory from "./model.js";
-import { InventoryMovement } from "./model.js";
 import { pick } from "../../core/utils/pick.js";
 import { sendCreated, sendError, sendSuccess } from "../../core/utils/response.js";
-import { syncProductFromInventoryItem } from "../../shared/products/service.js";
+import {
+    buildInventoryProductSnapshot,
+    sharedProductService,
+    syncProductFromInventoryItem,
+} from "../../shared/products/index.js";
 import {
     adjustInventoryQuantity,
     buildInventoryScopeFilter,
     getInventoryBranchId,
-    normalizeInventoryName,
 } from "./stockService.js";
-
-const buildInventorySnapshot = ({ payload, product }) => {
-    const productName = product?.name || payload.productName?.trim() || "";
-    const quantity = Number(payload.quantity) || 0;
-
-    return {
-        productId: product?._id || payload.productId || null,
-        productName,
-        normalizedName: normalizeInventoryName(productName),
-        quantity,
-        costPrice: product?.costPrice ?? Number(payload.costPrice) ?? 0,
-        sellingPrice: product?.sellingPrice ?? Number(payload.sellingPrice) ?? 0,
-        category: product?.category || payload.category || "",
-        supplier: payload.supplier?.trim() || "",
-        lowStockAlert: product?.lowStockAlert ?? Number(payload.lowStockAlert) ?? 10,
-        vatRate: product?.taxRate ?? Number(payload.vatRate) ?? 0,
-        sku: product?.sku || payload.sku || "",
-        barcode: product?.barcode || payload.barcode || "",
-    };
-};
+import { listStockMovements } from "../../shared/stock-movements/index.js";
+import { buildAuditChanges, logAudit } from "../../core/utils/auditLogger.js";
 
 // Get all inventory items
 export const getInventory = async (req, res) => {
@@ -57,7 +41,7 @@ export const createInventoryItem = async (req, res) => {
             productId: payload.productId,
             session,
         });
-        const snapshot = buildInventorySnapshot({ payload, product });
+        const snapshot = buildInventoryProductSnapshot({ payload, product });
 
         const item = new Inventory({
             ...snapshot,
@@ -68,6 +52,20 @@ export const createInventoryItem = async (req, res) => {
 
         await item.save({ session });
         await session.commitTransaction();
+        await logAudit(
+            {
+                action: "create",
+                module: "inventory",
+                targetId: item._id,
+                targetName: item.productName,
+                description: `Created inventory item ${item.productName}`,
+                metadata: {
+                    quantity: item.quantity,
+                    costPrice: item.costPrice,
+                },
+            },
+            req
+        );
         return sendCreated(res, item, "Inventory item created");
     } catch (error) {
         await session.abortTransaction();
@@ -128,12 +126,38 @@ export const updateInventoryItem = async (req, res) => {
             productId: mergedPayload.productId || existing.productId,
             session,
         });
-        const snapshot = buildInventorySnapshot({ payload: mergedPayload, product });
+        const snapshot = buildInventoryProductSnapshot({
+            payload: mergedPayload,
+            product,
+        });
+        const existingSnapshot = existing.toObject();
 
         Object.assign(existing, snapshot);
         await existing.save({ session });
 
         await session.commitTransaction();
+        await logAudit(
+            {
+                action: "update",
+                module: "inventory",
+                targetId: existing._id,
+                targetName: existing.productName,
+                description: `Updated inventory item ${existing.productName}`,
+                changes: buildAuditChanges(existingSnapshot, existing.toObject(), [
+                    "productName",
+                    "quantity",
+                    "costPrice",
+                    "sellingPrice",
+                    "category",
+                    "supplier",
+                    "lowStockAlert",
+                    "vatRate",
+                    "sku",
+                    "barcode",
+                ]),
+            },
+            req
+        );
         return sendSuccess(res, { data: existing, message: "Item updated" });
     } catch (error) {
         await session.abortTransaction();
@@ -155,6 +179,21 @@ export const deleteInventoryItem = async (req, res) => {
             return sendError(res, { status: 404, message: "Item not found" });
         }
 
+        await logAudit(
+            {
+                action: "delete",
+                module: "inventory",
+                targetId: item._id,
+                targetName: item.productName,
+                description: `Deleted inventory item ${item.productName}`,
+                metadata: {
+                    quantity: item.quantity,
+                    costPrice: item.costPrice,
+                },
+            },
+            req
+        );
+
         return sendSuccess(res, { message: "Item deleted" });
     } catch (error) {
         console.error(error);
@@ -165,10 +204,32 @@ export const deleteInventoryItem = async (req, res) => {
 // Get low stock items
 export const getLowStock = async (req, res) => {
     try {
-        const ownerFilter = buildInventoryScopeFilter(req);
-        const items = await Inventory.find(ownerFilter);
+        const [products, inventoryItems] = await Promise.all([
+            sharedProductService.getLowStock(req),
+            Inventory.find(buildInventoryScopeFilter(req)),
+        ]);
+        const inventoryByProductId = new Map(
+            inventoryItems
+                .filter((item) => item.productId)
+                .map((item) => [String(item.productId), item])
+        );
 
-        const lowStock = items.filter(item => item.quantity <= item.lowStockAlert);
+        const lowStock = products.map((product) => {
+            const inventoryItem = inventoryByProductId.get(String(product._id));
+            const snapshot = buildInventoryProductSnapshot({
+                product,
+                payload: {
+                    supplier: inventoryItem?.supplier || "",
+                    quantity: product.stockQty,
+                },
+            });
+
+            return {
+                _id: inventoryItem?._id || product._id,
+                ...snapshot,
+                productId: product._id,
+            };
+        });
         return sendSuccess(res, { data: lowStock });
     } catch (error) {
         console.error(error);
@@ -218,10 +279,28 @@ export const createInventoryAdjustment = async (req, res) => {
                 type: numericDelta > 0 ? "ADJUST" : "OUT",
                 reason: reason.trim(),
                 note: note.trim(),
+                sourceType: "adjustment",
+                sourceId: existing._id,
             },
         });
 
         await session.commitTransaction();
+        await logAudit(
+            {
+                action: "adjust",
+                module: "inventory",
+                targetId: item._id,
+                targetName: item.productName,
+                description: `Adjusted stock for ${item.productName}`,
+                changes: buildAuditChanges(existing.toObject(), item.toObject(), ["quantity"]),
+                metadata: {
+                    quantityDelta: numericDelta,
+                    reason: reason.trim(),
+                    note: note.trim(),
+                },
+            },
+            req
+        );
         return sendSuccess(res, { data: item, message: "Inventory adjusted" });
     } catch (error) {
         await session.abortTransaction();
@@ -234,18 +313,33 @@ export const createInventoryAdjustment = async (req, res) => {
 
 export const getInventoryMovements = async (req, res) => {
     try {
-        const filter = buildInventoryScopeFilter(req);
+        const movements = await listStockMovements({
+            context: req,
+            inventoryItemId: req.query.inventoryItemId || null,
+            productId: req.query.productId || null,
+            limit: 50,
+        });
+        const mappedMovements = movements.map((movement) => {
+            const movementData = movement.toObject();
+            const inventoryItem = movementData.inventoryItemId
+                ? {
+                    _id: movementData.inventoryItemId._id,
+                    productName: movementData.inventoryItemId.productName,
+                }
+                : movementData.productId
+                    ? {
+                        _id: movementData.productId._id,
+                        productName: movementData.productId.name,
+                    }
+                    : null;
 
-        if (req.query.inventoryItemId) {
-            filter.inventoryItemId = req.query.inventoryItemId;
-        }
+            return {
+                ...movementData,
+                inventoryItemId: inventoryItem,
+            };
+        });
 
-        const movements = await InventoryMovement.find(filter)
-            .populate("inventoryItemId", "productName")
-            .sort({ createdAt: -1 })
-            .limit(50);
-
-        return sendSuccess(res, { data: movements });
+        return sendSuccess(res, { data: mappedMovements });
     } catch (error) {
         console.error(error);
         return sendError(res, { status: 500, message: "Server error" });

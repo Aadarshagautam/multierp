@@ -1,16 +1,14 @@
 import Inventory from "../../modules/inventory/model.js";
 import { DEFAULT_VAT_RATE } from "../../core/utils/nepal.js";
 import {
-  DEFAULT_PRODUCT_CATEGORY,
   DEFAULT_PRODUCT_TYPE,
-  DEFAULT_PRODUCT_UNIT,
-  DEFAULT_REORDER_LEVEL,
 } from "./constants.js";
 import {
   buildProductScopeFilter,
   getProductBranchId,
   productRepository,
 } from "./repository.js";
+import { buildProductIdentitySnapshot } from "./snapshots.js";
 import { normalizeProductPayload } from "./validation.js";
 
 const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -28,6 +26,20 @@ const buildSearchClause = (search = "") => {
   ];
 };
 
+const getSearchRank = (product = {}, search = "") => {
+  const normalizedSearch = String(search || "").trim().toLowerCase();
+  if (!normalizedSearch) return 999;
+
+  const exactFields = [product.barcode, product.sku, product.code, product.name]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  if (exactFields.some((value) => value === normalizedSearch)) return 0;
+  if (exactFields.some((value) => value.startsWith(normalizedSearch))) return 1;
+  if (exactFields.some((value) => value.includes(normalizedSearch))) return 2;
+  return 3;
+};
+
 const buildScopedProductData = (data = {}, context = {}) => ({
   ...normalizeProductPayload(data),
   userId: context.userId,
@@ -38,21 +50,16 @@ const buildScopedProductData = (data = {}, context = {}) => ({
 });
 
 export const mapInventoryItemToProductInput = (inventoryItem = {}) =>
-  normalizeProductPayload({
-    name: inventoryItem.productName || inventoryItem.name || "",
-    sku: inventoryItem.sku || "",
-    barcode: inventoryItem.barcode || "",
-    description: inventoryItem.description || "",
-    type: DEFAULT_PRODUCT_TYPE,
-    category: inventoryItem.category || DEFAULT_PRODUCT_CATEGORY,
-    costPrice: inventoryItem.costPrice ?? 0,
-    sellingPrice: inventoryItem.sellingPrice ?? 0,
-    currentStock: inventoryItem.quantity ?? inventoryItem.stockQty ?? 0,
-    unit: inventoryItem.unit || DEFAULT_PRODUCT_UNIT,
-    taxRate: inventoryItem.vatRate ?? inventoryItem.taxRate ?? DEFAULT_VAT_RATE,
-    reorderLevel: inventoryItem.lowStockAlert ?? DEFAULT_REORDER_LEVEL,
-    trackStock: true,
-    isActive: inventoryItem.isActive ?? true,
+  ({
+    ...buildProductIdentitySnapshot({
+      ...inventoryItem,
+      name: inventoryItem.productName || inventoryItem.name || "",
+      type: inventoryItem.productType || inventoryItem.type || DEFAULT_PRODUCT_TYPE,
+      taxRate: inventoryItem.vatRate ?? inventoryItem.taxRate ?? DEFAULT_VAT_RATE,
+      trackStock: inventoryItem.trackStock ?? true,
+      isActive: inventoryItem.isActive ?? true,
+    }),
+    stockQty: Number(inventoryItem.quantity ?? inventoryItem.stockQty ?? 0) || 0,
   });
 
 export const resolveProductReference = async (
@@ -172,11 +179,26 @@ export const sharedProductService = {
     const pageNumber = Math.max(1, Number(page) || 1);
     const limitNumber = Math.max(1, Number(limit) || 50);
     const skip = (pageNumber - 1) * limitNumber;
+    const hasSearch = Boolean(searchClause);
+    const fetchLimit = hasSearch
+      ? Math.max(limitNumber * Math.max(pageNumber, 1) * 3, 40)
+      : limitNumber;
 
-    const [products, total] = await Promise.all([
-      productRepository.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNumber),
+    const [rawProducts, total] = await Promise.all([
+      productRepository.find(filter).sort({ createdAt: -1 }).limit(fetchLimit),
       productRepository.count(filter),
     ]);
+    const rankedProducts = hasSearch
+      ? [...rawProducts].sort((left, right) => {
+          const rankDelta = getSearchRank(left, search) - getSearchRank(right, search);
+          if (rankDelta !== 0) return rankDelta;
+          const availabilityDelta =
+            Number(Boolean(right.isAvailable)) - Number(Boolean(left.isAvailable));
+          if (availabilityDelta !== 0) return availabilityDelta;
+          return String(left.name || "").localeCompare(String(right.name || ""));
+        })
+      : rawProducts;
+    const products = rankedProducts.slice(skip, skip + limitNumber);
 
     return {
       products,

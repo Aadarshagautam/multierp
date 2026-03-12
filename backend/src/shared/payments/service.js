@@ -2,9 +2,14 @@ import {
   PAYMENT_METHOD_LABEL_MAP,
   POS_PAYMENT_METHOD_VALUES,
 } from "./constants.js";
+import {
+  calculateSettlementAmounts,
+  derivePaymentStatusFromAmounts,
+} from "../billing/status.js";
+import { roundMoney } from "../billing/utils.js";
+import PaymentRecordModel from "./model.js";
 
-export const roundMoney = (value) =>
-  Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+export { roundMoney };
 
 export const createDomainError = (message, status = 400) =>
   Object.assign(new Error(message), { status });
@@ -97,17 +102,15 @@ export const calculatePaymentSummary = ({
   const receivedAmount = roundMoney(
     normalizedPayments.reduce((sum, payment) => sum + payment.amount, 0)
   );
-  const paidValue =
-    normalizedMethod === "credit"
-      ? Math.min(receivedAmount, safeGrandTotal)
-      : Math.min(receivedAmount, safeGrandTotal);
-  const paidValueRounded = roundMoney(paidValue);
-  const changeAmount = roundMoney(Math.max(0, receivedAmount - safeGrandTotal));
-  const dueAmount = roundMoney(Math.max(0, safeGrandTotal - paidValueRounded));
-
-  let status = "paid";
-  if (dueAmount > 0 && paidValueRounded > 0) status = "partial";
-  if (paidValueRounded === 0 && dueAmount > 0) status = "due";
+  const settlement = calculateSettlementAmounts({
+    totalAmount: safeGrandTotal,
+    receivedAmount,
+  });
+  const status = derivePaymentStatusFromAmounts({
+    totalAmount: safeGrandTotal,
+    paidAmount: settlement.paidAmount,
+    unpaidStatus: "due",
+  });
 
   return {
     paymentMethod:
@@ -121,11 +124,59 @@ export const calculatePaymentSummary = ({
         ? "mixed"
         : normalizedMethod,
     payments: normalizedPayments,
-    receivedAmount,
-    paidAmount: paidValueRounded,
-    dueAmount,
-    changeAmount,
+    receivedAmount: settlement.receivedAmount,
+    paidAmount: settlement.paidAmount,
+    dueAmount: settlement.dueAmount,
+    changeAmount: settlement.changeAmount,
     status,
-    isPaidInFull: dueAmount === 0,
+    isPaidInFull: settlement.dueAmount === 0,
   };
+};
+
+export const buildPosSalePaymentRecord = ({ sale, context = {} } = {}) => ({
+  userId: sale?.userId || context.userId,
+  orgId: sale?.orgId ?? context.orgId ?? null,
+  branchId: sale?.branchId ?? context.membership?.branchId ?? null,
+  sourceType: "pos_sale",
+  sourceId: sale?._id,
+  documentNumber: sale?.invoiceNo || "",
+  customerId: sale?.customerId || null,
+  paymentMethod: sale?.paymentMethod || "cash",
+  paymentMode: sale?.paymentMode || sale?.paymentMethod || "cash",
+  payments: Array.isArray(sale?.payments)
+    ? sale.payments.map((payment) => ({
+        method: payment.method,
+        amount: roundMoney(payment.amount),
+        reference: String(payment.reference || "").trim(),
+        label: String(payment.label || "").trim(),
+      }))
+    : [],
+  receivedAmount: roundMoney(sale?.receivedAmount),
+  paidAmount: roundMoney(sale?.paidAmount),
+  dueAmount: roundMoney(sale?.dueAmount),
+  changeAmount: roundMoney(sale?.changeAmount),
+  status: sale?.status || "paid",
+  notes: String(sale?.notes || "").trim(),
+  createdBy: context.userId || sale?.soldBy || sale?.userId || null,
+});
+
+export const createPaymentRecord = async (payload, { session = null } = {}) => {
+  const [paymentRecord] = await PaymentRecordModel.create(
+    [payload],
+    session ? { session } : undefined
+  );
+  return paymentRecord;
+};
+
+export const syncPosSalePaymentRecord = async ({
+  sale,
+  context = {},
+  session = null,
+} = {}) => {
+  if (!sale?._id) {
+    throw createDomainError("Sale is required to create a payment record.");
+  }
+
+  const paymentRecord = buildPosSalePaymentRecord({ sale, context });
+  return createPaymentRecord(paymentRecord, { session });
 };

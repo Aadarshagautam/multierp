@@ -1,6 +1,8 @@
 const roundMoney = value =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100
 
+const HELD_BILLS_STORAGE_KEY = 'erp-pos-held-bills:v1'
+
 export const LOYALTY_POINT_VALUE = 0.5
 export const LOYALTY_EARN_RATE = 1
 
@@ -120,7 +122,10 @@ export const buildPosSalePayload = ({
     paymentMethod === 'credit'
       ? 0
       : paymentState.receivedAmount ?? paymentState.paidAmount ?? 0,
-  customerId: selectedCustomer?._id || null,
+  customerId:
+    selectedCustomer?._id && selectedCustomer?.customerType !== 'walk_in'
+      ? selectedCustomer._id
+      : null,
   overallDiscount,
   notes,
   orderType,
@@ -138,7 +143,8 @@ export const getCheckoutIssues = ({
   paymentState = {},
 } = {}) => {
   const issues = []
-  const hasCustomerAccount = Boolean(selectedCustomer?._id)
+  const hasCustomerAccount =
+    Boolean(selectedCustomer?._id) && selectedCustomer?.customerType !== 'walk_in'
 
   if (!Array.isArray(cart) || cart.length === 0) {
     issues.push('Add at least one product to the cart.')
@@ -169,4 +175,75 @@ export const findExactProductMatch = (products = [], search = '') => {
       .filter(Boolean)
     return candidates.includes(trimmed)
   }) || null
+}
+
+export const readHeldBills = () => {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const raw = window.localStorage.getItem(HELD_BILLS_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export const createHeldBillSnapshot = ({
+  cart = [],
+  paymentMethod = 'cash',
+  paidAmount = '',
+  selectedCustomer = null,
+  overallDiscount = 0,
+  notes = '',
+  orderType = 'takeaway',
+  selectedTable = null,
+  deliveryAddress = '',
+  loyaltyRedeem = 0,
+} = {}) => {
+  const totals = calculateCartTotals({
+    cart,
+    overallDiscount,
+    loyaltyRedeem,
+  })
+
+  return {
+    id: `held-${Date.now()}`,
+    heldAt: new Date().toISOString(),
+    cart,
+    paymentMethod,
+    paidAmount,
+    selectedCustomer,
+    overallDiscount,
+    notes,
+    orderType,
+    selectedTable,
+    deliveryAddress,
+    loyaltyRedeem,
+    summary: {
+      itemCount: (Array.isArray(cart) ? cart : []).reduce(
+        (sum, item) => sum + (Number(item.qty) || 0),
+        0
+      ),
+      grandTotal: totals.grandTotal,
+      customerName: selectedCustomer?.name || 'Walk-in Customer',
+    },
+  }
+}
+
+export const saveHeldBill = snapshot => {
+  if (typeof window === 'undefined' || !snapshot) return []
+
+  const currentBills = readHeldBills()
+  const nextBills = [snapshot, ...currentBills].slice(0, 12)
+  window.localStorage.setItem(HELD_BILLS_STORAGE_KEY, JSON.stringify(nextBills))
+  return nextBills
+}
+
+export const removeHeldBill = heldBillId => {
+  if (typeof window === 'undefined') return []
+
+  const nextBills = readHeldBills().filter(bill => bill.id !== heldBillId)
+  window.localStorage.setItem(HELD_BILLS_STORAGE_KEY, JSON.stringify(nextBills))
+  return nextBills
 }

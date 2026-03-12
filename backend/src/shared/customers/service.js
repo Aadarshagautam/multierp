@@ -282,7 +282,7 @@ export const sharedCustomerService = {
 
   async ensureWalkInCustomer(
     context = {},
-    { branchMode = "all", defaultToCurrentBranch = false } = {}
+    { branchMode = "all", defaultToCurrentBranch = false, session = null } = {}
   ) {
     const branchId =
       defaultToCurrentBranch && context.orgId ? getCustomerBranchId(context) : null;
@@ -290,7 +290,11 @@ export const sharedCustomerService = {
       [{ customerType: "walk_in", isActive: true }],
       buildCustomerScopeConditions(context, { branchMode, branchId })
     );
-    let customer = await customerRepository.findOne(filter);
+    let customerQuery = customerRepository.findOne(filter);
+    if (session) {
+      customerQuery = customerQuery.session(session);
+    }
+    let customer = await customerQuery;
 
     if (customer) return customer;
 
@@ -310,7 +314,7 @@ export const sharedCustomerService = {
       )
     );
 
-    return customer.save();
+    return customer.save(session ? { session } : undefined);
   },
 
   buildSnapshot(customer) {

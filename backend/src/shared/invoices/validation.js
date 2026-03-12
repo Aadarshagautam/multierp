@@ -6,6 +6,7 @@ import {
   INVOICE_PAYMENT_METHOD_VALUES,
   INVOICE_STATUS_VALUES,
 } from "../payments/constants.js";
+import { INVOICE_VAT_DISCOUNT_MODE_VALUES } from "../billing/constants.js";
 
 const invoiceItemSchema = z.object({
   productId: z.string().trim().min(1, "Product is required"),
@@ -24,6 +25,10 @@ export const createInvoiceSchema = z.object({
   overallDiscountType: z.enum(INVOICE_OVERALL_DISCOUNT_TYPES).optional().default("none"),
   overallDiscountValue: z.coerce.number().min(0).optional().default(0),
   withoutVat: z.boolean().optional().default(false),
+  vatDiscountMode: z
+    .enum(INVOICE_VAT_DISCOUNT_MODE_VALUES)
+    .optional()
+    .default("after_vat_no_prorate"),
   dueDate: z.string().min(1, "Due date is required"),
   paymentMethod: z.enum(INVOICE_PAYMENT_METHOD_VALUES).optional().default("cash"),
   notes: z.string().trim().optional().default(""),
@@ -36,6 +41,7 @@ export const updateInvoiceSchema = z.object({
   overallDiscountType: z.enum(INVOICE_OVERALL_DISCOUNT_TYPES).optional(),
   overallDiscountValue: z.coerce.number().min(0).optional(),
   withoutVat: z.boolean().optional(),
+  vatDiscountMode: z.enum(INVOICE_VAT_DISCOUNT_MODE_VALUES).optional(),
   dueDate: z.string().min(1, "Due date is required").optional(),
   paymentMethod: z.enum(INVOICE_PAYMENT_METHOD_VALUES).optional(),
   notes: z.string().trim().optional(),

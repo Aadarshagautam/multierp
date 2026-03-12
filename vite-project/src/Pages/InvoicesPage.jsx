@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom'
 import api from './lib/axios'
 import toast from 'react-hot-toast'
 import { formatCurrencyNpr, formatDateNepal } from '../utils/nepal.js'
+import AppContext from '../context/app-context.js'
 
 const STATUS_CONFIG = {
   draft: {
@@ -64,6 +65,7 @@ const formatDate = (dateStr) => {
 }
 
 const InvoicesPage = () => {
+  const { hasPermission } = React.useContext(AppContext)
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -79,6 +81,9 @@ const InvoicesPage = () => {
     draftCount: 0,
   })
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(null)
+  const canCreateInvoice = hasPermission('invoices.create')
+  const canUpdateInvoice = hasPermission('invoices.update')
+  const canDeleteInvoice = hasPermission('invoices.delete')
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -227,13 +232,15 @@ const InvoicesPage = () => {
             <h1 className="text-3xl font-bold text-gray-900 mb-1">Invoices</h1>
             <p className="text-gray-600">Manage and track all your invoices in one place.</p>
           </div>
-          <Link
-            to="/invoices/new"
-            className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-3 rounded-lg font-medium transition-colors shadow-sm"
-          >
-            <Plus className="w-5 h-5" />
-            Create Invoice
-          </Link>
+          {canCreateInvoice && (
+            <Link
+              to="/invoices/new"
+              className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-3 rounded-lg font-medium transition-colors shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              Create Invoice
+            </Link>
+          )}
         </div>
       </div>
 
@@ -356,14 +363,14 @@ const InvoicesPage = () => {
               ? `No ${statusFilter} invoices at the moment.`
               : 'Create your first invoice to start tracking your billing and payments.'}
           </p>
-          {!searchTerm && statusFilter === 'all' && (
-            <Link
-              to="/invoices/new"
-              className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Create First Invoice
-            </Link>
+          {!searchTerm && statusFilter === 'all' && canCreateInvoice && (
+              <Link
+                to="/invoices/new"
+                className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                Create First Invoice
+              </Link>
           )}
         </div>
       ) : (
@@ -444,51 +451,55 @@ const InvoicesPage = () => {
                         </button>
 
                         {/* Change Status Dropdown */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setStatusDropdownOpen(statusDropdownOpen === invoiceId ? null : invoiceId)
-                            }}
-                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                            title="Change Status"
-                          >
-                            <Send className="w-5 h-5" />
-                          </button>
-                          {statusDropdownOpen === invoiceId && (
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                              <p className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                                Change Status
-                              </p>
-                              {Object.entries(STATUS_CONFIG).map(([key, config]) => {
-                                if (key === invoice.status) return null
-                                const Icon = config.icon
-                                return (
-                                  <button
-                                    key={key}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      updateStatus(invoiceId, key)
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                  >
-                                    <Icon className="w-4 h-4" />
-                                    {config.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
+                        {canUpdateInvoice && (
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setStatusDropdownOpen(statusDropdownOpen === invoiceId ? null : invoiceId)
+                              }}
+                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Change Status"
+                            >
+                              <Send className="w-5 h-5" />
+                            </button>
+                            {statusDropdownOpen === invoiceId && (
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                                <p className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                                  Change Status
+                                </p>
+                                {Object.entries(STATUS_CONFIG).map(([key, config]) => {
+                                  if (key === invoice.status) return null
+                                  const Icon = config.icon
+                                  return (
+                                    <button
+                                      key={key}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        updateStatus(invoiceId, key)
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <Icon className="w-4 h-4" />
+                                      {config.label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Delete */}
-                        <button
-                          onClick={() => deleteInvoice(invoiceId)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete Invoice"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        {canDeleteInvoice && (
+                          <button
+                            onClick={() => deleteInvoice(invoiceId)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Invoice"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

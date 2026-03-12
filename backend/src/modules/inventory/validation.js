@@ -1,48 +1,45 @@
 import { z } from "zod";
+import {
+  optionalProductReferenceIdSchema,
+  productBarcodeFieldSchema,
+  productCostPriceFieldSchema,
+  productLowStockAlertFieldSchema,
+  productNameFieldSchema,
+  productReferenceIdSchema,
+  productSellingPriceFieldSchema,
+  productSkuFieldSchema,
+  productTaxRateFieldSchema,
+} from "../../shared/products/validation.js";
 
 const optionalTrimmedString = z.string().trim().optional().default("");
-const nullableProductId = z
-  .union([z.string(), z.null(), z.undefined()])
-  .transform((value) => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    return trimmed || null;
-  });
-const optionalProductId = z
-  .union([z.string(), z.null()])
-  .optional()
-  .transform((value) => {
-    if (value === undefined) return undefined;
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    return trimmed || null;
-  });
 
 export const createInventoryItemSchema = z.object({
-  productId: nullableProductId,
-  productName: z.string().trim().min(1, "Product name is required"),
+  productId: productReferenceIdSchema,
+  productName: productNameFieldSchema,
   quantity: z.coerce.number().min(0, "Quantity must be 0 or more"),
-  costPrice: z.coerce.number().min(0, "Cost price must be 0 or more"),
-  sellingPrice: z.coerce.number().min(0, "Selling price must be 0 or more"),
+  costPrice: productCostPriceFieldSchema,
+  sellingPrice: productSellingPriceFieldSchema,
   category: optionalTrimmedString,
   supplier: optionalTrimmedString,
-  lowStockAlert: z.coerce.number().min(0).optional().default(10),
-  vatRate: z.coerce.number().min(0).max(100).optional().default(0),
-  sku: optionalTrimmedString,
-  barcode: optionalTrimmedString,
+  lowStockAlert: productLowStockAlertFieldSchema.optional().default(10),
+  vatRate: productTaxRateFieldSchema.optional().default(0),
+  sku: productSkuFieldSchema.optional().default(""),
+  barcode: productBarcodeFieldSchema.optional().default(""),
 });
 
 export const updateInventoryItemSchema = z
   .object({
-    productId: optionalProductId,
-    productName: z.string().trim().min(1).optional(),
+    productId: optionalProductReferenceIdSchema,
+    productName: productNameFieldSchema.optional(),
     quantity: z.coerce.number().min(0).optional(),
-    costPrice: z.coerce.number().min(0).optional(),
-    sellingPrice: z.coerce.number().min(0).optional(),
+    costPrice: productCostPriceFieldSchema.optional(),
+    sellingPrice: productSellingPriceFieldSchema.optional(),
     category: z.string().trim().optional(),
     supplier: z.string().trim().optional(),
-    lowStockAlert: z.coerce.number().min(0).optional(),
-    vatRate: z.coerce.number().min(0).max(100).optional(),
-    sku: z.string().trim().optional(),
-    barcode: z.string().trim().optional(),
+    lowStockAlert: productLowStockAlertFieldSchema.optional(),
+    vatRate: productTaxRateFieldSchema.optional(),
+    sku: productSkuFieldSchema.optional(),
+    barcode: productBarcodeFieldSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "No valid fields to update",

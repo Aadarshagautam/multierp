@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { hasPermission } from "../../../core/config/permissions.js";
 import PosSale from "../models/Sale.js";
 import PosProduct from "../../../shared/products/model.js";
 import PosTable from "../models/Table.js";
@@ -14,11 +15,12 @@ import {
 import {
   calculatePaymentSummary,
   createDomainError,
+  syncPosSalePaymentRecord,
 } from "../../../shared/payments/index.js";
 import {
-  createRefundStockMovement,
-  createSaleStockMovement,
+  applyProductStockDelta,
 } from "../../../shared/stock-movements/index.js";
+import { sharedAccountingService } from "../../../shared/accounting/index.js";
 import { buildPosScopeFilter, getPosBranchId } from "../utils/scope.js";
 import {
   consumeRecipeStock,
@@ -27,6 +29,25 @@ import {
 
 const usesRecipeStock = (product) =>
   Array.isArray(product?.recipe) && product.recipe.length > 0;
+
+const KITCHEN_ORDER_STATUSES = new Set(["preparing", "ready"]);
+
+const ensureOrderStatusPermission = (orderStatus, req) => {
+  const effectivePermissions = Array.isArray(req?.effectivePermissions)
+    ? req.effectivePermissions
+    : [];
+
+  if (KITCHEN_ORDER_STATUSES.has(orderStatus)) {
+    if (!hasPermission(effectivePermissions, "pos.kitchen.update")) {
+      throw createDomainError("Permission denied: pos.kitchen.update", 403);
+    }
+    return;
+  }
+
+  if (!hasPermission(effectivePermissions, "pos.sales.update")) {
+    throw createDomainError("Permission denied: pos.sales.update", 403);
+  }
+};
 
 const getWalkInSnapshot = () => ({
   customerId: null,
@@ -120,22 +141,30 @@ export const saleService = {
         throw createDomainError("Credit billing requires a selected customer account.");
       }
 
-      const customer = data.customerId
+      const selectedCustomer = data.customerId
         ? await sharedCustomerService.getById(data.customerId, req, {
             branchMode: "current_or_global",
             session,
           })
         : null;
 
-      if (data.customerId && !customer) {
+      if (data.customerId && !selectedCustomer) {
         throw createDomainError("Selected customer was not found for this branch.", 404);
       }
+      const walkInCustomer = data.customerId
+        ? null
+        : await sharedCustomerService.ensureWalkInCustomer(req, {
+            branchMode: "current_or_global",
+            defaultToCurrentBranch: true,
+            session,
+          });
+      const billingCustomer = selectedCustomer || walkInCustomer;
 
       const pointsRedeemed = data.loyaltyPointsRedeemed || 0;
-      if (pointsRedeemed > 0 && !customer) {
+      if (pointsRedeemed > 0 && !selectedCustomer) {
         throw createDomainError("Select a customer before redeeming loyalty points.");
       }
-      if (pointsRedeemed > (customer?.loyaltyPoints || 0)) {
+      if (pointsRedeemed > (selectedCustomer?.loyaltyPoints || 0)) {
         throw createDomainError("The selected customer does not have enough loyalty points.");
       }
 
@@ -176,7 +205,7 @@ export const saleService = {
       });
 
       validateSaleSettlement({
-        customer,
+        customer: selectedCustomer,
         customerId: data.customerId,
         paymentSummary,
       });
@@ -191,7 +220,7 @@ export const saleService = {
         },
         { session }
       );
-      const customerSnapshot = buildSaleCustomerSnapshot(customer);
+      const customerSnapshot = buildSaleCustomerSnapshot(billingCustomer);
 
       const [sale] = await PosSale.create(
         [
@@ -237,6 +266,13 @@ export const saleService = {
         { session }
       );
 
+      await syncPosSalePaymentRecord({
+        sale,
+        context: req,
+        session,
+      });
+      await sharedAccountingService.syncPosSale(sale, req, { session });
+
       for (const stockOperation of stockOperations) {
         const { product, lineItem, recipeDrivenStock } = stockOperation;
 
@@ -251,22 +287,30 @@ export const saleService = {
             req,
             session,
             allowNegative,
+            movement: {
+              reason: "Recipe consumption",
+              note: sale.invoiceNo,
+              sourceType: "recipe_sale",
+              sourceId: sale._id,
+              referenceNo: sale.invoiceNo,
+            },
           });
           continue;
         }
 
-        await PosProduct.findByIdAndUpdate(
-          product._id,
-          { $inc: { stockQty: -lineItem.qty } },
-          { session }
-        );
-        await createSaleStockMovement({
+        await applyProductStockDelta({
           productId: product._id,
-          qty: lineItem.qty,
-          saleId: sale._id,
-          invoiceNo: sale.invoiceNo,
-          req,
+          quantityDelta: -lineItem.qty,
+          context: req,
           session,
+          allowNegative,
+          reason: "Sale",
+          note: sale.invoiceNo,
+          sourceType: "sale",
+          sourceId: sale._id,
+          referenceNo: sale.invoiceNo,
+          refSaleId: sale._id,
+          createInventoryMirror: true,
         });
       }
 
@@ -287,7 +331,7 @@ export const saleService = {
         );
       }
 
-      if (data.customerId) {
+      if (data.customerId && selectedCustomer?.customerType !== "walk_in") {
         const updatedCustomer = await sharedCustomerService.applySaleMetrics(
           data.customerId,
           {
@@ -372,6 +416,7 @@ export const saleService = {
   },
 
   async updateOrderStatus(id, orderStatus, req) {
+    ensureOrderStatusPermission(orderStatus, req);
     const scopeFilter = buildPosScopeFilter(req);
     const sale = await PosSale.findOneAndUpdate(
       { _id: id, ...scopeFilter },
@@ -428,20 +473,28 @@ export const saleService = {
             saleQty: item.qty,
             req,
             session,
+            movement: {
+              reason: "Recipe restore",
+              note: sale.invoiceNo,
+              sourceType: "recipe_refund",
+              sourceId: sale._id,
+              referenceNo: sale.invoiceNo,
+            },
           });
         } else {
-          await PosProduct.findOneAndUpdate(
-            { _id: item.productId, ...scopeFilter },
-            { $inc: { stockQty: item.qty } },
-            { session }
-          );
-          await createRefundStockMovement({
+          await applyProductStockDelta({
             productId: item.productId,
-            qty: item.qty,
-            saleId: sale._id,
-            invoiceNo: sale.invoiceNo,
-            req,
+            quantityDelta: item.qty,
+            context: req,
             session,
+            allowNegative: true,
+            reason: `Refund - ${sale.invoiceNo}`.trim(),
+            note: sale.invoiceNo,
+            sourceType: "sale_refund",
+            sourceId: sale._id,
+            referenceNo: sale.invoiceNo,
+            refSaleId: sale._id,
+            createInventoryMirror: true,
           });
         }
       }
@@ -450,6 +503,7 @@ export const saleService = {
       sale.orderStatus = "cancelled";
       sale.refundedAt = new Date();
       await sale.save({ session });
+      await sharedAccountingService.syncPosSale(sale, req, { session });
 
       if (sale.tableId) {
         await PosTable.findOneAndUpdate(
@@ -459,7 +513,7 @@ export const saleService = {
         );
       }
 
-      if (sale.customerId) {
+      if (sale.customerId && sale.customerType !== "walk_in") {
         await sharedCustomerService.applySaleMetrics(
           sale.customerId,
           {

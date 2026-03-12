@@ -9,13 +9,13 @@ import {
 } from "./constants.js";
 
 const optionalTrimmedString = z.string().trim().optional().default("");
-const nullableIdField = z
+export const productReferenceIdSchema = z
   .union([z.string(), z.null(), z.undefined()])
   .transform((value) => {
     const trimmed = typeof value === "string" ? value.trim() : "";
     return trimmed || null;
   });
-const optionalNullableIdField = z
+export const optionalProductReferenceIdSchema = z
   .union([z.string(), z.null()])
   .optional()
   .transform((value) => {
@@ -23,6 +23,23 @@ const optionalNullableIdField = z
     const trimmed = typeof value === "string" ? value.trim() : "";
     return trimmed || null;
   });
+export const productNameFieldSchema = z.string().trim().min(1, "Product name is required");
+export const productCodeFieldSchema = z.string().trim();
+export const productSkuFieldSchema = z.string().trim();
+export const productBarcodeFieldSchema = z.string().trim();
+export const productDescriptionFieldSchema = z.string().trim();
+export const productCategoryFieldSchema = z.string().trim();
+export const productUnitFieldSchema = z.string().trim();
+export const productCostPriceFieldSchema = z
+  .coerce
+  .number()
+  .min(0, "Cost price must be 0 or more");
+export const productSellingPriceFieldSchema = z
+  .coerce
+  .number()
+  .min(0, "Selling price must be 0 or more");
+export const productTaxRateFieldSchema = z.coerce.number().min(0).max(100);
+export const productLowStockAlertFieldSchema = z.coerce.number().min(0);
 
 export const modifierOptionSchema = z.object({
   label: z.string().trim().min(1, "Modifier option label is required"),
@@ -86,26 +103,26 @@ export const normalizeProductPayload = (payload = {}, { partial = false } = {}) 
   return normalized;
 };
 
-const createProductBaseSchema = z.object({
-  name: z.string().trim().min(1, "Product name is required"),
-  code: optionalTrimmedString,
-  sku: optionalTrimmedString,
-  barcode: optionalTrimmedString,
-  description: optionalTrimmedString,
+export const createProductBaseSchema = z.object({
+  name: productNameFieldSchema,
+  code: productCodeFieldSchema.optional().default(""),
+  sku: productSkuFieldSchema.optional().default(""),
+  barcode: productBarcodeFieldSchema.optional().default(""),
+  description: productDescriptionFieldSchema.optional().default(""),
   type: z.enum(PRODUCT_TYPE_VALUES).optional(),
-  category: z.string().trim().optional().default(DEFAULT_PRODUCT_CATEGORY),
-  categoryId: nullableIdField,
+  category: productCategoryFieldSchema.optional().default(DEFAULT_PRODUCT_CATEGORY),
+  categoryId: productReferenceIdSchema,
   menuCategory: optionalTrimmedString,
-  unit: z.string().trim().optional().default(DEFAULT_PRODUCT_UNIT),
-  unitId: nullableIdField,
-  costPrice: z.coerce.number().min(0).optional().default(0),
-  sellingPrice: z.coerce.number().min(0, "Selling price must be 0 or more"),
+  unit: productUnitFieldSchema.optional().default(DEFAULT_PRODUCT_UNIT),
+  unitId: productReferenceIdSchema,
+  costPrice: productCostPriceFieldSchema.optional().default(0),
+  sellingPrice: productSellingPriceFieldSchema,
   stockQty: z.coerce.number().min(0).optional(),
   currentStock: z.coerce.number().min(0).optional(),
-  taxRate: z.coerce.number().min(0).max(100).optional().default(DEFAULT_VAT_RATE),
-  taxId: nullableIdField,
-  lowStockAlert: z.coerce.number().min(0).optional(),
-  reorderLevel: z.coerce.number().min(0).optional(),
+  taxRate: productTaxRateFieldSchema.optional().default(DEFAULT_VAT_RATE),
+  taxId: productReferenceIdSchema,
+  lowStockAlert: productLowStockAlertFieldSchema.optional(),
+  reorderLevel: productLowStockAlertFieldSchema.optional(),
   trackStock: z.boolean().optional(),
   preparationTime: z.coerce.number().int().min(0).optional().default(0),
   isAvailable: z.boolean().optional().default(true),
@@ -119,27 +136,26 @@ export const createProductSchema = createProductBaseSchema.transform((value) =>
   normalizeProductPayload(value)
 );
 
-export const updateProductSchema = z
-  .object({
-    name: z.string().trim().min(1).optional(),
-    code: z.string().trim().optional(),
-    sku: z.string().trim().optional(),
-    barcode: z.string().trim().optional(),
-    description: z.string().trim().optional(),
+export const updateProductBaseSchema = z.object({
+    name: productNameFieldSchema.optional(),
+    code: productCodeFieldSchema.optional(),
+    sku: productSkuFieldSchema.optional(),
+    barcode: productBarcodeFieldSchema.optional(),
+    description: productDescriptionFieldSchema.optional(),
     type: z.enum(PRODUCT_TYPE_VALUES).optional(),
-    category: z.string().trim().optional(),
-    categoryId: optionalNullableIdField,
-    menuCategory: z.string().trim().optional(),
-    unit: z.string().trim().optional(),
-    unitId: optionalNullableIdField,
-    costPrice: z.coerce.number().min(0).optional(),
-    sellingPrice: z.coerce.number().min(0).optional(),
+    category: productCategoryFieldSchema.optional(),
+    categoryId: optionalProductReferenceIdSchema,
+    menuCategory: productDescriptionFieldSchema.optional(),
+    unit: productUnitFieldSchema.optional(),
+    unitId: optionalProductReferenceIdSchema,
+    costPrice: productCostPriceFieldSchema.optional(),
+    sellingPrice: productSellingPriceFieldSchema.optional(),
     stockQty: z.coerce.number().min(0).optional(),
     currentStock: z.coerce.number().min(0).optional(),
-    taxRate: z.coerce.number().min(0).max(100).optional(),
-    taxId: optionalNullableIdField,
-    lowStockAlert: z.coerce.number().min(0).optional(),
-    reorderLevel: z.coerce.number().min(0).optional(),
+    taxRate: productTaxRateFieldSchema.optional(),
+    taxId: optionalProductReferenceIdSchema,
+    lowStockAlert: productLowStockAlertFieldSchema.optional(),
+    reorderLevel: productLowStockAlertFieldSchema.optional(),
     trackStock: z.boolean().optional(),
     preparationTime: z.coerce.number().int().min(0).optional(),
     isAvailable: z.boolean().optional(),
@@ -147,5 +163,7 @@ export const updateProductSchema = z
     imageUrl: z.string().trim().optional(),
     modifiers: z.array(modifierSchema).optional(),
     recipe: z.array(recipeItemSchema).optional(),
-  })
+  });
+
+export const updateProductSchema = updateProductBaseSchema
   .transform((value) => normalizeProductPayload(value, { partial: true }));

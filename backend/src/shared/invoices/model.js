@@ -4,6 +4,7 @@ import {
   INVOICE_PAYMENT_METHODS,
 } from "../../core/utils/nepal.js";
 import { PRODUCT_MODEL_NAME } from "../products/constants.js";
+import { INVOICE_VAT_DISCOUNT_MODE_VALUES } from "../billing/constants.js";
 
 const invoiceItemSchema = new mongoose.Schema(
   {
@@ -144,6 +145,11 @@ const invoiceSchema = new mongoose.Schema(
     withoutVat: {
       type: Boolean,
       default: false,
+    },
+    vatDiscountMode: {
+      type: String,
+      enum: INVOICE_VAT_DISCOUNT_MODE_VALUES,
+      default: "after_vat_no_prorate",
     },
     status: {
       type: String,

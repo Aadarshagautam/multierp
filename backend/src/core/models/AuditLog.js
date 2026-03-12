@@ -5,7 +5,24 @@ const auditLogSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ["create", "update", "delete", "login", "logout", "export", "import", "stage_change", "convert", "status_change"],
+      enum: [
+        "create",
+        "update",
+        "delete",
+        "login",
+        "logout",
+        "export",
+        "import",
+        "stage_change",
+        "convert",
+        "status_change",
+        "cancel",
+        "refund",
+        "adjust",
+        "return",
+        "open",
+        "close",
+      ],
     },
     module: {
       type: String,
@@ -36,9 +53,19 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    userRole: {
+      type: String,
+      default: "",
+    },
     orgId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "organization",
+      index: true,
+      default: null,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "branch",
       index: true,
       default: null,
     },
@@ -46,11 +73,16 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
 auditLogSchema.index({ orgId: 1, createdAt: -1 });
+auditLogSchema.index({ branchId: 1, createdAt: -1 });
 auditLogSchema.index({ userId: 1, createdAt: -1 });
 auditLogSchema.index({ module: 1 });
 

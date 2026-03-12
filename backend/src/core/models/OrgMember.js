@@ -16,7 +16,7 @@ const orgMemberSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["owner", "admin", "manager", "accountant", "cashier", "member", "viewer"],
+      enum: ["owner", "admin", "manager", "accountant", "cashier", "waiter", "kitchen", "member", "viewer"],
       default: "member",
     },
     branchId: {

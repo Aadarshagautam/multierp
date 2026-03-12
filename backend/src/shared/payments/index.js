@@ -7,8 +7,12 @@ export {
   INVOICE_OVERALL_DISCOUNT_TYPES,
 } from "./constants.js";
 export {
+  buildPosSalePaymentRecord,
   calculatePaymentSummary,
+  createPaymentRecord,
   createDomainError,
   normalizePaymentLines,
   roundMoney,
+  syncPosSalePaymentRecord,
 } from "./service.js";
+export { default as PaymentRecordModel } from "./model.js";

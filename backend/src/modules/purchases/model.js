@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { PURCHASE_PAYMENT_METHOD_VALUES } from "../../shared/payment-methods/index.js";
+import { PRODUCT_MODEL_NAME } from "../../shared/products/constants.js";
 
 const purchasePaymentMethods = [...PURCHASE_PAYMENT_METHOD_VALUES];
 
@@ -23,6 +24,7 @@ const purchaseSchema = new mongoose.Schema(
     orgId: { type: mongoose.Schema.Types.ObjectId, ref: "organization", default: null, index: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: "branch", default: null, index: true },
     supplierId: { type: mongoose.Schema.Types.ObjectId, ref: "purchase_supplier", default: null },
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: PRODUCT_MODEL_NAME, default: null },
     supplierName: { type: String, required: true, trim: true },
     supplierContact: { type: String, trim: true, default: "" },
     productName: { type: String, required: true, trim: true },

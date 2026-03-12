@@ -6,14 +6,21 @@
 
 @layer base {
   :root {
-    --surface: #f7f0e3;
-    --surface-strong: #fffaf2;
-    --surface-soft: #eef5ef;
-    --ink: #18281f;
-    --ink-soft: #536255;
-    --brand-deep: #103b31;
-    --brand-accent: #c96c1f;
-    --line: rgba(24, 40, 31, 0.08);
+    --surface: #f4f7f4;
+    --surface-strong: #ffffff;
+    --surface-soft: #edf3ef;
+    --surface-muted: #e7eeea;
+    --surface-sidebar: #16241e;
+    --surface-sidebar-soft: #1f3129;
+    --ink: #15211c;
+    --ink-soft: #5f6e67;
+    --brand-deep: #153b31;
+    --brand: #1e6a56;
+    --brand-soft: #dfeee8;
+    --accent: #d08a37;
+    --danger: #bf3f36;
+    --line: rgba(21, 33, 28, 0.08);
+    --line-strong: rgba(21, 33, 28, 0.14);
   }
 
   html {
@@ -28,85 +35,99 @@
     -moz-osx-font-smoothing: grayscale;
     background-color: var(--surface);
     background:
-      radial-gradient(circle at top left, rgba(201, 108, 31, 0.18), transparent 28%),
-      radial-gradient(circle at top right, rgba(16, 59, 49, 0.14), transparent 24%),
-      linear-gradient(180deg, #fffaf2 0%, #f8f0e3 42%, #eef5ef 100%);
+      radial-gradient(circle at top right, rgba(30, 106, 86, 0.12), transparent 26%),
+      radial-gradient(circle at top left, rgba(208, 138, 55, 0.1), transparent 22%),
+      linear-gradient(180deg, #fbfdfb 0%, #f4f7f4 48%, #edf3ef 100%);
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Segoe UI', system-ui, sans-serif;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.02em;
   }
 
   ::selection {
-    background: rgba(201, 108, 31, 0.22);
-    color: #103b31;
+    background: rgba(30, 106, 86, 0.18);
+    color: var(--brand-deep);
   }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #f6efe4; }
-  ::-webkit-scrollbar-thumb { background: #d1b48f; border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: #ba8b5b; }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(225, 232, 227, 0.8);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(95, 110, 103, 0.35);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(95, 110, 103, 0.5);
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95;
-    background: linear-gradient(135deg, #103b31 0%, #1c6a57 58%, #c96c1f 100%);
-    box-shadow: 0 20px 40px -22px rgba(16, 59, 49, 0.55);
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-[0.99];
+    background: linear-gradient(135deg, #153b31 0%, #1e6a56 100%);
+    box-shadow: 0 16px 32px -20px rgba(21, 59, 49, 0.58);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 18px 36px -20px rgba(21, 59, 49, 0.62);
+    transform: translateY(-1px);
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl border bg-white/90 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-white active:scale-95;
-    border-color: rgba(24, 40, 31, 0.1);
-    box-shadow: 0 12px 30px -26px rgba(16, 59, 49, 0.4);
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.99];
+    border-color: var(--line);
+    box-shadow: 0 12px 24px -22px rgba(21, 59, 49, 0.3);
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95;
-    background: linear-gradient(135deg, #b42318 0%, #dc4b2b 100%);
-    box-shadow: 0 18px 36px -24px rgba(180, 35, 24, 0.45);
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-[0.99];
+    background: linear-gradient(135deg, #a62f28 0%, #cf4a3f 100%);
+    box-shadow: 0 16px 32px -20px rgba(166, 47, 40, 0.46);
   }
 
   .input-primary {
-    @apply w-full rounded-2xl border bg-white/90 px-4 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400 focus:outline-none focus:ring-2;
-    border-color: rgba(24, 40, 31, 0.1);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    @apply w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400;
+    border-color: var(--line);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
   }
 
   .input-primary:focus {
-    border-color: rgba(201, 108, 31, 0.5);
-    --tw-ring-color: rgba(201, 108, 31, 0.12);
-  }
-
-  .card {
-    @apply rounded-3xl border transition hover:shadow-md;
-    border-color: var(--line);
-    background-color: rgba(255, 255, 255, 0.88);
-    box-shadow: 0 18px 46px -32px rgba(16, 59, 49, 0.35);
-  }
-
-  .card-gradient {
-    @apply rounded-3xl border transition hover:shadow-md;
-    border-color: rgba(201, 108, 31, 0.12);
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 240, 227, 0.95));
-    box-shadow: 0 18px 48px -34px rgba(16, 59, 49, 0.28);
+    border-color: rgba(30, 106, 86, 0.42);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      0 0 0 4px rgba(30, 106, 86, 0.12);
   }
 
   .page-shell {
-    @apply min-h-screen space-y-5 px-4 pb-12 pt-20 sm:px-6 lg:ml-64 lg:px-8;
+    @apply min-h-screen space-y-6 px-4 pb-12 pt-24 sm:px-6 lg:ml-[17.5rem] lg:px-8;
   }
 
   .panel {
-    @apply rounded-3xl border backdrop-blur-xl;
-    border-color: rgba(24, 40, 31, 0.08);
-    box-shadow: 0 26px 70px -42px rgba(16, 59, 49, 0.42);
-    background-color: rgba(255, 255, 255, 0.82);
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 242, 0.86));
+    @apply rounded-[28px] border backdrop-blur-sm;
+    border-color: var(--line);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 250, 0.94));
+    box-shadow:
+      0 24px 58px -42px rgba(21, 59, 49, 0.32),
+      0 2px 10px -8px rgba(21, 33, 28, 0.12);
   }
 
   .section-kicker {
-    @apply text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-800;
+    @apply text-[11px] font-semibold uppercase tracking-[0.22em];
+    color: var(--brand);
   }
 
   .section-heading {
@@ -114,26 +135,28 @@
   }
 
   .status-pill {
-    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium text-stone-700;
-    border-color: rgba(24, 40, 31, 0.08);
-    background: rgba(255, 255, 255, 0.7);
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium;
+    border-color: rgba(21, 33, 28, 0.08);
+    background: rgba(255, 255, 255, 0.88);
+    color: var(--ink-soft);
   }
 
   .action-tile {
-    @apply flex items-start justify-between gap-4 rounded-3xl border p-5 transition;
-    border-color: rgba(24, 40, 31, 0.08);
-    background-color: rgba(255, 255, 255, 0.88);
-    box-shadow: 0 16px 42px -34px rgba(16, 59, 49, 0.28);
+    @apply flex items-start justify-between gap-4 rounded-[26px] border p-5 transition;
+    border-color: var(--line);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 247, 244, 0.92));
+    box-shadow: 0 18px 34px -30px rgba(21, 59, 49, 0.24);
   }
 
   .action-tile:hover {
-    border-color: rgba(201, 108, 31, 0.26);
+    border-color: rgba(30, 106, 86, 0.18);
     transform: translateY(-1px);
-    box-shadow: 0 24px 54px -34px rgba(16, 59, 49, 0.35);
+    box-shadow: 0 22px 38px -28px rgba(21, 59, 49, 0.28);
   }
 
   .erp-page-header {
-    @apply flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between;
+    @apply flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between;
   }
 
   .erp-page-actions {
@@ -141,31 +164,40 @@
   }
 
   .erp-kpi-card {
-    @apply rounded-3xl border bg-white p-5 transition hover:shadow-md;
-    border-color: rgba(24, 40, 31, 0.08);
-    background-color: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 18px 46px -34px rgba(16, 59, 49, 0.28);
+    @apply rounded-[26px] border bg-white p-5 transition;
+    border-color: var(--line);
+    box-shadow: 0 20px 34px -32px rgba(21, 59, 49, 0.28);
+  }
+
+  .erp-kpi-card:hover {
+    border-color: rgba(30, 106, 86, 0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 24px 42px -30px rgba(21, 59, 49, 0.3);
   }
 
   .erp-toolbar {
-    @apply flex flex-col gap-4 rounded-3xl border bg-white p-4 md:flex-row md:items-center md:justify-between;
-    border-color: rgba(24, 40, 31, 0.08);
-    background-color: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 16px 38px -32px rgba(16, 59, 49, 0.24);
+    @apply flex flex-col gap-4 rounded-[26px] border bg-white p-4 md:flex-row md:items-center md:justify-between;
+    border-color: var(--line);
+    box-shadow: 0 16px 30px -28px rgba(21, 59, 49, 0.22);
   }
 
   .erp-chip {
     @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold;
-    border-color: rgba(24, 40, 31, 0.08);
-    background-color: rgba(255, 255, 255, 0.76);
+    border-color: rgba(21, 33, 28, 0.08);
+    background-color: rgba(255, 255, 255, 0.86);
     color: var(--ink-soft);
   }
 
+  .erp-subtle {
+    @apply rounded-[24px] border p-4;
+    border-color: rgba(21, 33, 28, 0.08);
+    background: linear-gradient(180deg, rgba(239, 244, 240, 0.95), rgba(255, 255, 255, 0.82));
+  }
+
   .erp-table-shell {
-    @apply overflow-hidden rounded-3xl border bg-white;
-    border-color: rgba(24, 40, 31, 0.08);
-    background-color: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 18px 42px -34px rgba(16, 59, 49, 0.26);
+    @apply overflow-hidden rounded-[26px] border bg-white;
+    border-color: var(--line);
+    box-shadow: 0 18px 36px -32px rgba(21, 59, 49, 0.24);
   }
 
   .erp-table {
@@ -173,16 +205,17 @@
   }
 
   .erp-table thead {
-    background-color: rgba(238, 245, 239, 0.68);
+    background:
+      linear-gradient(180deg, rgba(239, 244, 240, 0.95), rgba(250, 252, 250, 0.95));
   }
 
   .erp-table th {
-    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500;
+    @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500;
   }
 
   .erp-table td {
     @apply px-4 py-4 align-top text-sm text-slate-700;
-    border-top: 1px solid rgba(24, 40, 31, 0.06);
+    border-top: 1px solid rgba(21, 33, 28, 0.06);
   }
 
   .erp-form-grid {
@@ -193,21 +226,115 @@
     @apply space-y-6;
   }
 
-  .erp-subtle {
-    @apply rounded-3xl border p-4;
-    border-color: rgba(24, 40, 31, 0.08);
-    background: rgba(248, 240, 227, 0.56);
+  .erp-empty-state {
+    @apply rounded-[28px] border border-dashed p-10 text-center;
+    border-color: rgba(21, 33, 28, 0.14);
+    background: rgba(255, 255, 255, 0.86);
+  }
+
+  .erp-list-row {
+    @apply flex items-center justify-between gap-4 rounded-[24px] border bg-white px-4 py-4 transition;
+    border-color: var(--line);
+  }
+
+  .erp-list-row:hover {
+    border-color: rgba(30, 106, 86, 0.14);
+    box-shadow: 0 18px 28px -30px rgba(21, 59, 49, 0.2);
+  }
+
+  .erp-note-card {
+    @apply rounded-[26px] border p-5;
+    border-color: rgba(208, 138, 55, 0.24);
+    background: linear-gradient(180deg, rgba(255, 249, 240, 0.96), rgba(255, 255, 255, 0.92));
+  }
+
+  .erp-shell-topbar {
+    @apply fixed inset-x-0 top-0 z-50 border-b backdrop-blur-xl;
+    border-color: rgba(21, 33, 28, 0.08);
+    background: rgba(255, 255, 255, 0.84);
+  }
+
+  .erp-shell-sidebar {
+    @apply fixed left-0 top-0 z-40 flex h-screen w-[17.5rem] flex-col border-r transition-transform duration-200;
+    border-color: rgba(255, 255, 255, 0.08);
+    background:
+      radial-gradient(circle at top left, rgba(208, 138, 55, 0.16), transparent 24%),
+      linear-gradient(180deg, #182821 0%, #142019 100%);
+    box-shadow: 18px 0 44px -28px rgba(11, 18, 14, 0.65);
+  }
+
+  .erp-sidebar-card {
+    @apply rounded-[26px] border p-4;
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .erp-sidebar-section {
+    @apply px-2 text-[11px] font-semibold uppercase tracking-[0.2em];
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .erp-sidebar-item {
+    @apply w-full rounded-[24px] border px-3 py-3 text-left transition;
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .erp-sidebar-item:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .erp-sidebar-item-active {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.11);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .erp-sidebar-subitem {
+    @apply flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition;
+    border-color: transparent;
+    color: rgba(226, 235, 230, 0.76);
+  }
+
+  .erp-sidebar-subitem:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.96);
+  }
+
+  .erp-sidebar-subitem-active {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+
+  .erp-module-card {
+    @apply rounded-[28px] border bg-white p-5 transition;
+    border-color: var(--line);
+    box-shadow: 0 18px 38px -34px rgba(21, 59, 49, 0.28);
+  }
+
+  .erp-module-card:hover {
+    border-color: rgba(30, 106, 86, 0.18);
+    transform: translateY(-1px);
+    box-shadow: 0 26px 46px -34px rgba(21, 59, 49, 0.3);
+  }
+
+  .erp-state-panel {
+    @apply rounded-[28px] border p-8 shadow-sm;
+    border-color: var(--line);
   }
 }
 
 @layer utilities {
   .gradient-bg {
-    background: linear-gradient(135deg, #103b31 0%, #1c6a57 55%, #c96c1f 100%);
+    background: linear-gradient(135deg, #153b31 0%, #1e6a56 100%);
   }
 
   .gradient-text {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #103b31 0%, #c96c1f 100%);
+    background-image: linear-gradient(135deg, #153b31 0%, #d08a37 100%);
   }
 
   .animate-fade-in {
@@ -224,9 +351,9 @@
 
   .subtle-grid {
     background-image:
-      linear-gradient(rgba(201, 108, 31, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(16, 59, 49, 0.06) 1px, transparent 1px);
-    background-size: 24px 24px;
+      linear-gradient(rgba(30, 106, 86, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(208, 138, 55, 0.06) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 }
 
@@ -254,11 +381,11 @@
 
 @keyframes scale {
   0% {
-    transform: scale(0.95);
+    transform: scale(0.98);
   }
 
   50% {
-    transform: scale(1.03);
+    transform: scale(1.01);
   }
 
   100% {

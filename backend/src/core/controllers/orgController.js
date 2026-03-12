@@ -12,8 +12,8 @@ import {
   normalizeBusinessType,
 } from "../utils/onboarding.js";
 
-const VALID_ROLES = ["owner", "admin", "manager", "accountant", "cashier", "member", "viewer"];
-const ASSIGNABLE_ROLES = ["admin", "manager", "accountant", "cashier", "member", "viewer"];
+const VALID_ROLES = ["owner", "admin", "manager", "accountant", "cashier", "waiter", "kitchen", "member", "viewer"];
+const ASSIGNABLE_ROLES = ["manager", "accountant", "cashier", "waiter", "kitchen", "admin", "member", "viewer"];
 
 const canManageWholeOrganization = (membership) =>
   ["owner", "admin"].includes(membership?.role);

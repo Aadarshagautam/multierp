@@ -50,3 +50,40 @@ test("recalculates invoice totals without VAT when requested", () => {
   assert.equal(totals.totalVat, 0);
   assert.equal(totals.grandTotal, 230);
 });
+
+test("keeps invoice totals aligned with after-vat prorated discounts", () => {
+  const totals = calculateInvoiceTotals({
+    items: [
+      {
+        productId: "prod-1",
+        productName: "Latte",
+        quantity: 1,
+        unitPrice: 200,
+        vatRate: 13,
+        discountType: "flat",
+        discountValue: 0,
+      },
+      {
+        productId: "prod-2",
+        productName: "Cake Slice",
+        quantity: 1,
+        unitPrice: 100,
+        vatRate: 13,
+        discountType: "flat",
+        discountValue: 0,
+      },
+    ],
+    overallDiscountType: "flat",
+    overallDiscountValue: 30,
+    vatDiscountMode: "after_vat_prorate",
+  });
+
+  assert.equal(totals.subtotal, 300);
+  assert.equal(totals.totalVat, 39);
+  assert.equal(totals.overallDiscountAmount, 30);
+  assert.equal(totals.grandTotal, 309);
+  assert.equal(
+    totals.items.reduce((sum, item) => sum + item.lineTotal, 0),
+    totals.grandTotal
+  );
+});

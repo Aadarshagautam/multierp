@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { purchaseApi } from "../lib/purchaseApi.js";
+import AppContext from "../context/app-context.js";
 import {
   DEFAULT_PHONE_PLACEHOLDER,
   PAYMENT_METHOD_LABELS,
@@ -70,6 +71,7 @@ const formatTitle = (value) =>
     .join(" ");
 
 export default function PurchasePage() {
+  const { hasPermission } = useContext(AppContext);
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
@@ -91,6 +93,10 @@ export default function PurchasePage() {
 
   const purchases = purchasesQuery.data?.data || [];
   const suppliers = suppliersQuery.data?.data || [];
+  const canCreatePurchase = hasPermission("purchases.create");
+  const canUpdatePurchase = hasPermission("purchases.update");
+  const canReturnPurchase = hasPermission("purchases.return");
+  const canDeletePurchase = hasPermission("purchases.delete");
 
   const invalidatePurchases = () => {
     qc.invalidateQueries({ queryKey: ["purchases"] });
@@ -189,12 +195,14 @@ export default function PurchasePage() {
   };
 
   const openCreateForm = () => {
+    if (!canCreatePurchase) return;
     setEditingPurchase(null);
     setForm(emptyForm);
     setShowForm(true);
   };
 
   const openEditForm = (purchase) => {
+    if (!canUpdatePurchase) return;
     setEditingPurchase(purchase);
     setForm({
       supplierName: purchase.supplierName || "",
@@ -215,12 +223,17 @@ export default function PurchasePage() {
     setShowForm(true);
   };
   const openReturnForm = (purchase) => {
+    if (!canReturnPurchase) return;
     setReturnTarget(purchase);
     setReturnForm(emptyReturnForm);
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    if ((editingPurchase && !canUpdatePurchase) || (!editingPurchase && !canCreatePurchase)) {
+      toast.error("Your role cannot save purchase changes.");
+      return;
+    }
 
     if (
       !form.supplierName.trim() ||
@@ -292,10 +305,12 @@ export default function PurchasePage() {
               each purchase record.
             </p>
           </div>
-          <button onClick={openCreateForm} className="btn-primary">
-            <Plus className="h-4 w-4" />
-            Add purchase
-          </button>
+          {canCreatePurchase && (
+            <button onClick={openCreateForm} className="btn-primary">
+              <Plus className="h-4 w-4" />
+              Add purchase
+            </button>
+          )}
         </div>
       </section>
 
@@ -787,10 +802,12 @@ export default function PurchasePage() {
             <p className="mt-2 text-sm leading-6 text-slate-500">
               Start with one supplier bill and the ledger will stay visible here.
             </p>
-            <button onClick={openCreateForm} className="btn-primary mt-5">
-              <Plus className="h-4 w-4" />
-              Add first purchase
-            </button>
+            {canCreatePurchase && (
+              <button onClick={openCreateForm} className="btn-primary mt-5">
+                <Plus className="h-4 w-4" />
+                Add first purchase
+              </button>
+            )}
           </div>
         ) : (
           <div className="mt-6 space-y-4">
@@ -914,14 +931,16 @@ export default function PurchasePage() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      onClick={() => openEditForm(purchase)}
-                      className="btn-secondary"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                      Edit
-                    </button>
-                    {purchase.deliveryStatus === "delivered" &&
+                    {canUpdatePurchase && (
+                      <button
+                        onClick={() => openEditForm(purchase)}
+                        className="btn-secondary"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                        Edit
+                      </button>
+                    )}
+                    {canReturnPurchase && purchase.deliveryStatus === "delivered" &&
                       purchase.quantity > (purchase.returnedQty || 0) && (
                         <button
                           onClick={() => openReturnForm(purchase)}
@@ -931,21 +950,23 @@ export default function PurchasePage() {
                           Return
                         </button>
                       )}
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete purchase for ${purchase.productName}?`
-                          )
-                        ) {
-                          deletePurchaseMut.mutate(purchase._id);
-                        }
-                      }}
-                      className="btn-secondary text-rose-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </button>
+                    {canDeletePurchase && (
+                      <button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete purchase for ${purchase.productName}?`
+                            )
+                          ) {
+                            deletePurchaseMut.mutate(purchase._id);
+                          }
+                        }}
+                        className="btn-secondary text-rose-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>

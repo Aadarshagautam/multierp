@@ -1,7 +1,14 @@
-import Inventory, { InventoryMovement } from "./model.js";
+import Inventory from "./model.js";
 import { buildTenantFilter } from "../../core/utils/tenant.js";
 import { getEffectiveReceivedQty } from "../purchases/utils.js";
-import { syncProductFromInventoryItem } from "../../shared/products/service.js";
+import {
+  buildInventoryProductSnapshot,
+  syncProductFromInventoryItem,
+} from "../../shared/products/index.js";
+import {
+  buildStockMovementPayload,
+  createStockMovement,
+} from "../../shared/stock-movements/index.js";
 
 export const normalizeInventoryName = (value = "") => value.trim().toLowerCase();
 
@@ -29,8 +36,27 @@ const findInventoryByName = async ({ productName, req, session }) => {
   }).session(session);
 };
 
+const findInventoryByProductReference = async ({
+  productId = null,
+  productName = "",
+  req,
+  session,
+}) => {
+  if (productId) {
+    const itemByProductId = await Inventory.findOne({
+      ...buildInventoryScopeFilter(req),
+      productId,
+    }).session(session);
+
+    if (itemByProductId) return itemByProductId;
+  }
+
+  return findInventoryByName({ productName, req, session });
+};
+
 export const adjustInventoryQuantity = async ({
   inventoryItemId = null,
+  productId = null,
   productName = "",
   quantityDelta,
   unitCost = 0,
@@ -45,13 +71,19 @@ export const adjustInventoryQuantity = async ({
   if (!delta) return null;
 
   let item = null;
+  let previousQuantity = 0;
   if (inventoryItemId) {
     item = await Inventory.findOne({
       _id: inventoryItemId,
       ...buildInventoryScopeFilter(req),
     }).session(session);
   } else {
-    item = await findInventoryByName({ productName, req, session });
+    item = await findInventoryByProductReference({
+      productId,
+      productName,
+      req,
+      session,
+    });
   }
 
   if (!item && !allowCreate) {
@@ -61,13 +93,10 @@ export const adjustInventoryQuantity = async ({
   if (!item) {
     const safeName = productName.trim();
     const safeUnitCost = Number(unitCost) || 0;
-    const [created] = await Inventory.create(
-      [{
-        userId: req.userId,
-        orgId: req.orgId || null,
-        branchId: getInventoryBranchId(req),
+    const snapshot = buildInventoryProductSnapshot({
+      payload: {
+        productId,
         productName: safeName,
-        normalizedName: normalizeInventoryName(safeName),
         quantity: delta,
         costPrice: safeUnitCost,
         sellingPrice: safeUnitCost,
@@ -77,11 +106,21 @@ export const adjustInventoryQuantity = async ({
         vatRate: 0,
         sku: "",
         barcode: "",
+      },
+    });
+    const [created] = await Inventory.create(
+      [{
+        ...snapshot,
+        userId: req.userId,
+        orgId: req.orgId || null,
+        branchId: getInventoryBranchId(req),
       }],
       { session }
     );
     item = created;
+    previousQuantity = 0;
   } else {
+    previousQuantity = roundQty(item.quantity || 0);
     const nextQty = roundQty((item.quantity || 0) + delta);
     if (!allowNegative && nextQty < 0) {
       throw new Error(
@@ -117,7 +156,7 @@ export const adjustInventoryQuantity = async ({
       barcode: item.barcode,
     },
     context: req,
-    productId: item.productId,
+    productId: productId || item.productId,
     session,
   });
 
@@ -129,19 +168,31 @@ export const adjustInventoryQuantity = async ({
     await item.save({ session });
   }
 
-  if (movement) {
-    await InventoryMovement.create(
-      [{
-        userId: req.userId,
-        orgId: req.orgId || null,
-        branchId: getInventoryBranchId(req),
+  const linkedProductId = syncedProduct?._id || item.productId || productId || null;
+
+  if (linkedProductId) {
+    await createStockMovement(
+      buildStockMovementPayload({
+        productId: linkedProductId,
         inventoryItemId: item._id,
-        type: movement.type || (delta >= 0 ? "IN" : "OUT"),
+        type: movement?.type || (delta >= 0 ? "IN" : "OUT"),
         qty: Math.abs(delta),
-        reason: movement.reason || "",
-        note: movement.note || "",
-        createdBy: req.userId,
-      }],
+        reason:
+          movement?.reason ||
+          (delta >= 0 ? "Stock increase" : "Stock decrease"),
+        note: movement?.note || "",
+        sourceType: movement?.sourceType || "manual",
+        sourceId: movement?.sourceId || item._id,
+        stockBefore: previousQuantity,
+        stockAfter: item.quantity,
+        unitCost:
+          Number.isFinite(Number(unitCost)) && Number(unitCost) >= 0
+            ? Number(unitCost)
+            : null,
+        refPurchaseId: movement?.refPurchaseId || null,
+        referenceNo: movement?.referenceNo || "",
+        context: req,
+      }),
       { session }
     );
   }
@@ -157,17 +208,25 @@ export const syncPurchaseInventory = async ({
   const allowNegative = process.env.ALLOW_NEGATIVE_STOCK === "true";
   const previousQty = getEffectiveReceivedQty(previousPurchase);
   const nextQty = getEffectiveReceivedQty(nextPurchase);
+  const previousProductId = previousPurchase?.productId || null;
+  const nextProductId = nextPurchase?.productId || null;
+  const sameProductId =
+    previousProductId &&
+    nextProductId &&
+    previousProductId.toString() === nextProductId.toString();
   const sameProductName =
     previousPurchase &&
     nextPurchase &&
     previousPurchase.productName?.trim() === nextPurchase.productName?.trim();
+  const scopedProductId = nextProductId || previousProductId || null;
 
-  if (sameProductName) {
+  if (sameProductId || sameProductName) {
     const delta = roundQty(nextQty - previousQty);
-    if (!delta) return;
+    if (!delta) return null;
 
-    await adjustInventoryQuantity({
-      productName: nextPurchase.productName,
+    return adjustInventoryQuantity({
+      productId: scopedProductId,
+      productName: nextPurchase.productName || previousPurchase.productName,
       quantityDelta: delta,
       unitCost: nextPurchase.unitPrice,
       supplier: nextPurchase.supplierName || "",
@@ -179,13 +238,18 @@ export const syncPurchaseInventory = async ({
         type: delta > 0 ? "IN" : "OUT",
         reason: delta > 0 ? "Purchase delivery" : "Purchase return",
         note: nextPurchase.supplierName || "",
+        sourceType: delta > 0 ? "purchase" : "purchase_return",
+        sourceId: nextPurchase?._id || previousPurchase?._id || null,
+        refPurchaseId: nextPurchase?._id || previousPurchase?._id || null,
+        referenceNo:
+          nextPurchase?._id?.toString?.() || previousPurchase?._id?.toString?.() || "",
       },
     });
-    return;
   }
 
   if (previousQty > 0) {
     await adjustInventoryQuantity({
+      productId: previousProductId,
       productName: previousPurchase.productName,
       quantityDelta: -previousQty,
       unitCost: previousPurchase.unitPrice,
@@ -197,12 +261,17 @@ export const syncPurchaseInventory = async ({
         type: "OUT",
         reason: "Purchase sync",
         note: previousPurchase.supplierName || "",
+        sourceType: "purchase_return",
+        sourceId: previousPurchase?._id || null,
+        refPurchaseId: previousPurchase?._id || null,
+        referenceNo: previousPurchase?._id?.toString?.() || "",
       },
     });
   }
 
   if (nextQty > 0) {
-    await adjustInventoryQuantity({
+    return adjustInventoryQuantity({
+      productId: nextProductId,
       productName: nextPurchase.productName,
       quantityDelta: nextQty,
       unitCost: nextPurchase.unitPrice,
@@ -215,9 +284,15 @@ export const syncPurchaseInventory = async ({
         type: "IN",
         reason: "Purchase delivery",
         note: nextPurchase.supplierName || "",
+        sourceType: "purchase",
+        sourceId: nextPurchase?._id || null,
+        refPurchaseId: nextPurchase?._id || null,
+        referenceNo: nextPurchase?._id?.toString?.() || "",
       },
     });
   }
+
+  return null;
 };
 
 export const consumeRecipeStock = async ({
@@ -226,6 +301,7 @@ export const consumeRecipeStock = async ({
   req,
   session,
   allowNegative = false,
+  movement = null,
 }) => {
   for (const ingredient of product.recipe || []) {
     const qtyRequired = roundQty((ingredient.qty || 0) * saleQty);
@@ -238,6 +314,14 @@ export const consumeRecipeStock = async ({
       req,
       session,
       allowNegative,
+      movement: {
+        type: "OUT",
+        reason: movement?.reason || "Recipe consumption",
+        note: movement?.note || ingredient.ingredientName || product.name,
+        sourceType: movement?.sourceType || "recipe_sale",
+        sourceId: movement?.sourceId || null,
+        referenceNo: movement?.referenceNo || "",
+      },
     });
   }
 };
@@ -247,6 +331,7 @@ export const restoreRecipeStock = async ({
   saleQty,
   req,
   session,
+  movement = null,
 }) => {
   for (const ingredient of product.recipe || []) {
     const qtyToRestore = roundQty((ingredient.qty || 0) * saleQty);
@@ -259,6 +344,14 @@ export const restoreRecipeStock = async ({
       req,
       session,
       allowNegative: true,
+      movement: {
+        type: "IN",
+        reason: movement?.reason || "Recipe restore",
+        note: movement?.note || ingredient.ingredientName || product.name,
+        sourceType: movement?.sourceType || "recipe_refund",
+        sourceId: movement?.sourceId || null,
+        referenceNo: movement?.referenceNo || "",
+      },
     });
   }
 };

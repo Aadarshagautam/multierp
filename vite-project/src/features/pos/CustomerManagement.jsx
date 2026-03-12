@@ -27,7 +27,7 @@ const formatCustomerAddress = customer => {
 }
 
 export default function CustomerManagement() {
-  const { orgBusinessType } = useContext(AppContext)
+  const { orgBusinessType, hasPermission } = useContext(AppContext)
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('')
@@ -43,6 +43,9 @@ export default function CustomerManagement() {
 
   const customers = (data?.data || []).filter(customer => !tierFilter || customer.tier === tierFilter)
   const allCustomers = data?.data || []
+  const canCreateCustomer = hasPermission('pos.customers.create')
+  const canUpdateCustomer = hasPermission('pos.customers.update')
+  const canDeleteCustomer = hasPermission('pos.customers.delete')
   const tierCounts = Object.keys(TIER_CONFIG).reduce(
     (accumulator, tier) => ({ ...accumulator, [tier]: allCustomers.filter(customer => customer.tier === tier).length }),
     {}
@@ -84,6 +87,7 @@ export default function CustomerManagement() {
   })
 
   const openEdit = customer => {
+    if (!canUpdateCustomer) return
     setEditId(customer._id)
     setForm({
       name: customer.name,
@@ -98,6 +102,10 @@ export default function CustomerManagement() {
 
   const handleSubmit = event => {
     event.preventDefault()
+    if ((editId && !canUpdateCustomer) || (!editId && !canCreateCustomer)) {
+      toast.error('Your role cannot save customer changes.')
+      return
+    }
     if (editId) {
       updateMut.mutate({ id: editId, data: form })
       return
@@ -114,13 +122,15 @@ export default function CustomerManagement() {
             <h1 className="text-2xl font-bold text-gray-900">{posMeta.customerTitle}</h1>
             <p className="text-sm text-gray-500">{posMeta.customerSummary}</p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-          >
-            <Plus className="w-4 h-4" />
-            Add Customer
-          </button>
+          {canCreateCustomer && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+            >
+              <Plus className="w-4 h-4" />
+              Add Customer
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -204,17 +214,21 @@ export default function CustomerManagement() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => openEdit(customer)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50">
-                              <Edit3 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Delete "${customer.name}"?`)) deleteMut.mutate(customer._id)
-                              }}
-                              className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {canUpdateCustomer && (
+                              <button onClick={() => openEdit(customer)} className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50">
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDeleteCustomer && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Delete "${customer.name}"?`)) deleteMut.mutate(customer._id)
+                                }}
+                                className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

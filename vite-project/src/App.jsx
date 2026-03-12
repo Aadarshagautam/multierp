@@ -135,13 +135,34 @@ const App = () => {
         >
           <Route path="/home" element={<LazyScreen><SuiteHomePage /></LazyScreen>} />
           <Route path="/dashboard" element={<LazyScreen><Dashboard /></LazyScreen>} />
-          <Route path="/notes" element={<LazyScreen><HomePages /></LazyScreen>} />
-          <Route path="/todos" element={<LazyScreen><TodoPage /></LazyScreen>} />
-          <Route path="/accounting" element={<LazyScreen><AccountingPage /></LazyScreen>} />
-          <Route path="/inventory" element={<LazyScreen><InventoryPage /></LazyScreen>} />
-          <Route path="/reports" element={<LazyScreen><ReportsPage /></LazyScreen>} />
-          <Route path="/purchases" element={<LazyScreen><PurchasePage /></LazyScreen>} />
-          <Route path="/customers" element={<LazyScreen><CustomersPage /></LazyScreen>} />
+          <Route
+            path="/notes"
+            element={<PermissionRoute permission="notes.read" title="Notes access is restricted"><LazyScreen><HomePages /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/todos"
+            element={<PermissionRoute permission="todos.read" title="Tasks access is restricted"><LazyScreen><TodoPage /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/accounting"
+            element={<PermissionRoute permission="accounting.read" title="Finance access is restricted"><LazyScreen><AccountingPage /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/inventory"
+            element={<PermissionRoute permission="inventory.read" title="Stock access is restricted"><LazyScreen><InventoryPage /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/reports"
+            element={<PermissionRoute permission="reports.read" title="Report access is restricted"><LazyScreen><ReportsPage /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/purchases"
+            element={<PermissionRoute permission="purchases.read" title="Purchase access is restricted"><LazyScreen><PurchasePage /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/customers"
+            element={<PermissionRoute permission="customers.read" title="Customer access is restricted"><LazyScreen><CustomersPage /></LazyScreen></PermissionRoute>}
+          />
           <Route
             path="/invoices"
             element={(
@@ -190,22 +211,55 @@ const App = () => {
               </PermissionRoute>
             )}
           />
-          <Route path="/crm" element={<LazyScreen><CRMPage /></LazyScreen>} />
+          <Route
+            path="/crm"
+            element={<PermissionRoute permission="crm.read" title="CRM access is restricted"><LazyScreen><CRMPage /></LazyScreen></PermissionRoute>}
+          />
           <Route path="/crm/leads" element={<Navigate to="/crm" replace />} />
           <Route path="/crm/leads/new" element={<Navigate to="/crm" replace />} />
           <Route path="/crm/leads/:id/edit" element={<Navigate to="/crm" replace />} />
           <Route path="/crm/pipeline" element={<Navigate to="/crm" replace />} />
-          <Route path="/pos" element={<LazyScreen><POSDashboard /></LazyScreen>} />
-          <Route path="/pos/products" element={<LazyScreen><ProductManagement /></LazyScreen>} />
-          <Route path="/pos/customers" element={<LazyScreen><CustomerManagement /></LazyScreen>} />
-          <Route path="/pos/billing" element={<LazyScreen><BillingScreen /></LazyScreen>} />
-          <Route path="/pos/sales" element={<LazyScreen><SalesHistory /></LazyScreen>} />
-          <Route path="/pos/sales/:id" element={<LazyScreen><PosInvoiceDetail /></LazyScreen>} />
-          <Route path="/pos/tables" element={<LazyScreen><TableManagement /></LazyScreen>} />
-          <Route path="/pos/kds" element={<LazyScreen><KitchenDisplay /></LazyScreen>} />
-          <Route path="/pos/shifts" element={<LazyScreen><ShiftManagement /></LazyScreen>} />
+          <Route
+            path="/pos"
+            element={<PermissionRoute permission="pos.read" title="POS access is restricted"><LazyScreen><POSDashboard /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/products"
+            element={<PermissionRoute permission="pos.products.read" title="Menu item access is restricted"><LazyScreen><ProductManagement /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/customers"
+            element={<PermissionRoute permission="pos.customers.read" title="Guest access is restricted"><LazyScreen><CustomerManagement /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/billing"
+            element={<PermissionRoute permission="pos.sales.create" title="Billing access is restricted"><LazyScreen><BillingScreen /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/sales"
+            element={<PermissionRoute permission="pos.sales.read" title="Sales history access is restricted"><LazyScreen><SalesHistory /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/sales/:id"
+            element={<PermissionRoute permission="pos.sales.read" title="Sale detail access is restricted"><LazyScreen><PosInvoiceDetail /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/tables"
+            element={<PermissionRoute permission="pos.tables.read" title="Floor access is restricted"><LazyScreen><TableManagement /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/kds"
+            element={<PermissionRoute permission="pos.kitchen.read" title="Kitchen access is restricted"><LazyScreen><KitchenDisplay /></LazyScreen></PermissionRoute>}
+          />
+          <Route
+            path="/pos/shifts"
+            element={<PermissionRoute permission="pos.shifts.read" title="Shift access is restricted"><LazyScreen><ShiftManagement /></LazyScreen></PermissionRoute>}
+          />
           <Route path="/apps" element={<LazyScreen><AppSwitcher /></LazyScreen>} />
-          <Route path="/settings" element={<LazyScreen><SettingsPage /></LazyScreen>} />
+          <Route
+            path="/settings"
+            element={<PermissionRoute permission="settings.read" title="Settings access is restricted"><LazyScreen><SettingsPage /></LazyScreen></PermissionRoute>}
+          />
         </Route>
       </Routes>
     </div>
