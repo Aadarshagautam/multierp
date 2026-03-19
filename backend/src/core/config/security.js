@@ -1,6 +1,5 @@
 import helmet from 'helmet'
 import mongoSanitize from 'express-mongo-sanitize'
-import xss from 'xss-clean'
 import hpp from 'hpp'
 
 export const securityMiddleware = (app) => {
@@ -23,9 +22,6 @@ export const securityMiddleware = (app) => {
 
   // Prevent NoSQL injection
   app.use(mongoSanitize())
-
-  // Prevent XSS attacks
-  app.use(xss())
 
   // Prevent HTTP Parameter Pollution
   app.use(hpp())
